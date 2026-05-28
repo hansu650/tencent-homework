@@ -36,7 +36,7 @@ const statusColor = {
 export function StarMap() {
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[520px] rounded-2xl border border-white/10 bg-[#06111F]/70 p-4 shadow-glow backdrop-blur-xl">
-      <div className="absolute inset-0 grid-pattern opacity-80" />
+      <div className="absolute inset-0 dark-grid-pattern opacity-80" />
       <div className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/15 blur-3xl" />
       <svg
         viewBox="0 0 420 420"

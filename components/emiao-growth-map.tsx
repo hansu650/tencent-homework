@@ -1,36 +1,34 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Activity,
   ArrowRight,
   BadgeCheck,
   BarChart3,
-  BookOpen,
+  BookOpenCheck,
   BrainCircuit,
-  BriefcaseBusiness,
-  Check,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
   ClipboardCheck,
   Clock3,
+  Copy,
   Download,
-  Eye,
   FileText,
   Filter,
   GraduationCap,
   Handshake,
-  HeartHandshake,
-  Layers,
-  Lightbulb,
+  Home,
+  Layers3,
   Loader2,
   Map,
   MessageSquareText,
-  Network,
+  PanelLeft,
   RefreshCw,
   Rocket,
-  Search,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Target,
@@ -40,14 +38,10 @@ import {
   WandSparkles
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Pie,
-  PieChart,
   PolarAngleAxis,
   PolarGrid,
   Radar,
@@ -76,376 +70,829 @@ import {
   SheetHeader,
   SheetTitle
 } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import type { GrowthStage, InternshipRole, RiskLevel } from "@/data/mockStudents";
+import type { DemoEvent, WeeklyReport } from "@/lib/demo-store";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import type { InternshipRole } from "@/data/mockStudents";
-import {
-  buildFeedbackBlocks,
-  deriveRiskLevel,
   getCoachAdvice,
   getCompletedTasks,
   getFitAverage,
   getPriorityActions,
   getRiskMeta,
   getRiskReasons,
-  getWeeklySummary,
   growthStages,
-  hydrateStudents,
-  normalizeStudent,
   roleTasks,
   type GrowthStudent,
   type MentorFeedback
 } from "@/lib/growth";
 import { average, cn } from "@/lib/utils";
 
-type ActiveRole = "student" | "mentor" | "hr";
+type ViewId = "overview" | "student" | "mentor" | "hrbp" | "report" | "events" | "solution";
+type Identity = "实习生" | "导师" | "HRBP";
 type RoleFilter = "全部" | InternshipRole;
-type GrowthFilter = "全部" | "稳定成长" | "需关注" | "高适岗";
+type StatusFilter = "全部" | "稳定成长" | "需关注" | "高适岗";
+type StageFilter = "全部" | GrowthStage;
 
-const initialStudents = hydrateStudents();
+type DashboardMetrics = {
+  total: number;
+  averageProgress: number;
+  feedbackTimelyRate: number;
+  focusCount: number;
+  highFitCount: number;
+  riskCounts: { name: string; value: number }[];
+  roleDistribution: { name: string; value: number }[];
+  stageDistribution: { name: string; value: number }[];
+};
+
+type StudentsResponse = {
+  students: GrowthStudent[];
+  metrics: DashboardMetrics;
+};
+
 const chartColors = ["#1664FF", "#00C2FF", "#22C55E", "#F59E0B", "#EF4444"];
+const loadingSteps = ["正在汇总任务进度", "正在归纳导师反馈", "正在识别风险信号", "正在生成 HRBP 行动建议"];
+const roleOptions: RoleFilter[] = ["全部", "研发", "产品", "销售"];
+const statusOptions: StatusFilter[] = ["全部", "稳定成长", "需关注", "高适岗"];
+const stageOptions: StageFilter[] = ["全部", ...growthStages];
 
 const tooltipStyle = {
   background: "#07111F",
   border: "1px solid rgba(255,255,255,0.12)",
   borderRadius: 12,
   color: "#fff",
-  boxShadow: "0 16px 40px rgba(0,0,0,0.28)"
+  boxShadow: "0 16px 40px rgba(15,23,42,0.24)"
 };
 
-function scrollToSection(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+const navItems: { id: ViewId; label: string; icon: ReactNode; hint: string }[] = [
+  { id: "overview", label: "总览", icon: <Home className="h-4 w-4" />, hint: "产品驾驶舱" },
+  { id: "student", label: "实习生工作台", icon: <GraduationCap className="h-4 w-4" />, hint: "成长陪跑" },
+  { id: "mentor", label: "导师工作台", icon: <Handshake className="h-4 w-4" />, hint: "反馈工具" },
+  { id: "hrbp", label: "HRBP 工作台", icon: <UsersRound className="h-4 w-4" />, hint: "适岗证据链" },
+  { id: "report", label: "AI 周报", icon: <FileText className="h-4 w-4" />, hint: "可复制导出" },
+  { id: "events", label: "数据日志", icon: <Activity className="h-4 w-4" />, hint: "模拟后端记录" },
+  { id: "solution", label: "方案说明", icon: <Layers3 className="h-4 w-4" />, hint: "作业四映射" }
+];
+
+function buildMetrics(students: GrowthStudent[]): DashboardMetrics {
+  const total = students.length || 1;
+  const focusStudents = students.filter((student) => student.riskLevel !== "low");
+  const highFitCount = students.filter((student) => getFitAverage(student) >= 85 && student.riskLevel === "low").length;
+  const riskTypes = ["任务滞后", "反馈缺失", "目标不清", "融入慢"];
+
+  return {
+    total: students.length,
+    averageProgress: average(students.map((student) => student.progress)),
+    feedbackTimelyRate: Math.round((students.filter((student) => student.feedbackCount >= 2).length / total) * 100),
+    focusCount: focusStudents.length,
+    highFitCount,
+    riskCounts: riskTypes.map((name) => ({
+      name,
+      value: students.filter((student) => getRiskReasons(student).includes(name)).length
+    })),
+    roleDistribution: roleOptions
+      .filter((role): role is InternshipRole => role !== "全部")
+      .map((role) => ({ name: role, value: students.filter((student) => student.role === role).length })),
+    stageDistribution: growthStages.map((stage) => ({
+      name: stage,
+      value: students.filter((student) => student.stage === stage).length
+    }))
+  };
 }
 
-function calcEnergy(student: GrowthStudent, progress = student.progress) {
-  return Math.min(
-    100,
-    Math.max(0, Math.round(34 + progress * 0.46 + student.feedbackCount * 4 + getFitAverage(student) * 0.13))
-  );
+function getStudentStatus(student: GrowthStudent): Exclude<StatusFilter, "全部"> {
+  if (getFitAverage(student) >= 85 && student.riskLevel === "low") return "高适岗";
+  if (student.riskLevel !== "low") return "需关注";
+  return "稳定成长";
 }
 
-function inferTags(note: string, student: GrowthStudent) {
-  const nextTags = new Set(student.tags.filter((tag) => tag !== "反馈缺失"));
-  if (note.includes("主动")) nextTags.add("主动提问");
-  if (note.includes("协作") || note.includes("沟通")) nextTags.add("协作强");
-  if (note.includes("需求")) nextTags.add("需求拆解");
-  if (note.includes("客户")) nextTags.add("客户敏感");
-  if (note.includes("代码") || note.includes("Review")) nextTags.add("代码规范");
-  if (student.feedbackCount + 1 >= 3) nextTags.add("反馈及时");
-  return Array.from(nextTags).slice(0, 5);
-}
-
-function SectionTitle({
-  eyebrow,
-  title,
-  description,
-  tag
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  tag?: string;
-}) {
-  return (
-    <div className="mx-auto mb-8 max-w-3xl text-center">
-      <div className="mb-4 flex flex-wrap justify-center gap-2">
-        <Badge variant="blue">{eyebrow}</Badge>
-        {tag && <Badge variant="green">{tag}</Badge>}
-      </div>
-      <h2 className="text-balance text-3xl font-semibold tracking-normal text-white sm:text-4xl">
-        {title}
-      </h2>
-      <p className="mt-4 text-base leading-7 text-slate-300">{description}</p>
-    </div>
-  );
+function getRiskBadgeVariant(level: RiskLevel) {
+  if (level === "high") return "red" as const;
+  if (level === "medium") return "yellow" as const;
+  return "green" as const;
 }
 
 export function EmiaoGrowthMap() {
-  const [studentsState, setStudentsState] = useState<GrowthStudent[]>(() => initialStudents);
-  const [activeRole, setActiveRole] = useState<ActiveRole>("student");
-  const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? "");
-  const [weeklyLoading, setWeeklyLoading] = useState(false);
-  const [reportVariant, setReportVariant] = useState(0);
-  const [exported, setExported] = useState(false);
+  const [students, setStudents] = useState<GrowthStudent[]>([]);
+  const [events, setEvents] = useState<DemoEvent[]>([]);
+  const [activeView, setActiveView] = useState<ViewId>("overview");
+  const [identity, setIdentity] = useState<Identity>("HRBP");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [mentorTargetId, setMentorTargetId] = useState("");
+  const [mentorNote, setMentorNote] = useState("");
+  const [feedbackResult, setFeedbackResult] = useState<MentorFeedback | null>(null);
+  const [feedbackStudentName, setFeedbackStudentName] = useState("");
+  const [report, setReport] = useState<WeeklyReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportStep, setReportStep] = useState(0);
+  const [taskLoadingId, setTaskLoadingId] = useState<string | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const currentStudent = studentsState.find((student) => student.id === selectedStudentId) ?? studentsState[0];
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2400);
+  }, []);
 
-  const updateStudent = (studentId: string, updater: (student: GrowthStudent) => GrowthStudent) => {
-    setStudentsState((current) =>
-      current.map((student) => (student.id === studentId ? normalizeStudent(updater(student)) : student))
-    );
-  };
+  const loadDemo = useCallback(async () => {
+    setPageLoading(true);
+    const [studentsResponse, eventsResponse] = await Promise.all([
+      fetch("/api/students", { cache: "no-store" }).then((res) => res.json() as Promise<StudentsResponse>),
+      fetch("/api/events", { cache: "no-store" }).then((res) => res.json() as Promise<{ events: DemoEvent[] }>)
+    ]);
 
-  const handleToggleTask = (studentId: string, taskId: string) => {
-    updateStudent(studentId, (student) => {
-      const wasCompleted = student.completedTaskIds.includes(taskId);
-      const completedTaskIds = wasCompleted
-        ? student.completedTaskIds.filter((id) => id !== taskId)
-        : [...student.completedTaskIds, taskId];
-      const progress = Math.round((completedTaskIds.length / roleTasks[student.role].length) * 100);
-      const nextTags = progress >= 75
-        ? student.tags.filter((tag) => tag !== "任务滞后")
-        : student.tags;
+    setStudents(studentsResponse.students);
+    setEvents(eventsResponse.events);
+    setSelectedStudentId((current) => current || studentsResponse.students[0]?.id || "");
+    setMentorTargetId((current) => current || studentsResponse.students[0]?.id || "");
+    setPageLoading(false);
+  }, []);
 
-      return {
-        ...student,
-        completedTaskIds,
-        progress,
-        tags: nextTags,
-        energy: calcEnergy({ ...student, completedTaskIds, progress, tags: nextTags }, progress)
-      };
+  useEffect(() => {
+    loadDemo().catch(() => {
+      setPageLoading(false);
+      showToast("演示数据加载失败，请刷新重试");
     });
+  }, [loadDemo, showToast]);
+
+  const metrics = useMemo(() => buildMetrics(students), [students]);
+  const selectedStudent = students.find((student) => student.id === selectedStudentId) ?? students[0];
+  const mentorTarget = students.find((student) => student.id === mentorTargetId) ?? students[0];
+
+  const handleIdentityChange = (next: Identity) => {
+    setIdentity(next);
+    setActiveView(next === "实习生" ? "student" : next === "导师" ? "mentor" : "hrbp");
   };
 
-  const handleFeedbackSaved = (studentId: string, feedback: MentorFeedback) => {
-    updateStudent(studentId, (student) => {
-      const feedbackCount = student.feedbackCount + 1;
-      const tags = inferTags(feedback.sourceNote, { ...student, feedbackCount });
-      const progress = Math.min(100, student.progress + 3);
+  const handleTaskToggle = async (student: GrowthStudent, taskId: string) => {
+    const completed = !student.completedTaskIds.includes(taskId);
+    setTaskLoadingId(taskId);
 
-      return {
-        ...student,
-        feedbackCount,
-        tags,
-        progress,
-        energy: calcEnergy({ ...student, feedbackCount, tags, progress }, progress),
-        lastFeedback: `${feedback.praise} ${feedback.suggestion}`,
-        nextAction: feedback.action,
-        feedbackHistory: [feedback, ...student.feedbackHistory].slice(0, 4)
+    try {
+      const response = await fetch(`/api/students/${student.id}/tasks`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, completed })
+      });
+      const result = (await response.json()) as { students: GrowthStudent[]; events: DemoEvent[] };
+      if (!response.ok) throw new Error("update failed");
+      setStudents(result.students);
+      setEvents(result.events);
+      showToast("已更新成长进度");
+    } catch {
+      showToast("任务更新失败，请稍后重试");
+    } finally {
+      setTaskLoadingId(null);
+    }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!mentorTarget) return;
+    setFeedbackLoading(true);
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: mentorTarget.id, mentorNote })
+      });
+      const result = (await response.json()) as {
+        feedback: MentorFeedback;
+        student: GrowthStudent;
+        students: GrowthStudent[];
+        events: DemoEvent[];
       };
-    });
+      if (!response.ok) throw new Error("feedback failed");
+      setFeedbackResult(result.feedback);
+      setFeedbackStudentName(result.student.name);
+      setStudents(result.students);
+      setEvents(result.events);
+      setMentorNote("");
+      showToast("反馈已写入学生档案");
+    } catch {
+      showToast("反馈生成失败，请稍后重试");
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
-  const regenerateReport = () => {
-    setWeeklyLoading(true);
-    window.setTimeout(() => {
-      setReportVariant((variant) => variant + 1);
-      setWeeklyLoading(false);
-    }, 850);
+  const handleGenerateReport = async (switchToReport = true) => {
+    if (switchToReport) setActiveView("report");
+    setReportLoading(true);
+    setReportStep(0);
+
+    try {
+      for (let index = 0; index < loadingSteps.length; index += 1) {
+        setReportStep(index);
+        await new Promise((resolve) => window.setTimeout(resolve, 420));
+      }
+
+      const response = await fetch("/api/weekly-report", { method: "POST" });
+      const result = (await response.json()) as {
+        report: WeeklyReport;
+        events: DemoEvent[];
+      };
+      if (!response.ok) throw new Error("report failed");
+      setReport(result.report);
+      setEvents(result.events);
+      showToast("AI 周报已生成");
+    } catch {
+      showToast("周报生成失败，请稍后重试");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setResetLoading(true);
+    try {
+      const response = await fetch("/api/reset", { method: "POST" });
+      const result = (await response.json()) as { students: GrowthStudent[]; events: DemoEvent[] };
+      if (!response.ok) throw new Error("reset failed");
+      setStudents(result.students);
+      setEvents(result.events);
+      setSelectedStudentId(result.students[0]?.id ?? "");
+      setMentorTargetId(result.students[0]?.id ?? "");
+      setReport(null);
+      setFeedbackResult(null);
+      showToast("演示数据已重置");
+    } catch {
+      showToast("重置失败，请稍后重试");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleCopyReport = async () => {
+    if (!report) return;
+    await navigator.clipboard.writeText(report.markdown);
+    showToast("周报已复制");
+  };
+
+  const handleExportMarkdown = () => {
+    if (!report) return;
+    const blob = new Blob([report.markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "emiao-growth-weekly-report.md";
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Markdown 已导出");
   };
 
   return (
-    <TooltipProvider>
-      <main className="min-h-screen overflow-hidden bg-transparent">
-        <Hero studentsState={studentsState} />
-        <ProblemDiagnosis />
-        <BeforeAfterSection />
-        <section id="demo" className="relative px-4 py-16 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <RoleEntrance activeRole={activeRole} onChange={setActiveRole} />
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeRole}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -18 }}
-                transition={{ duration: 0.35 }}
-                className="mt-8"
-              >
-                {activeRole === "student" && currentStudent && (
-                  <StudentWorkbench
-                    students={studentsState}
-                    selectedStudentId={currentStudent.id}
-                    onSelectStudent={setSelectedStudentId}
-                    onToggleTask={handleToggleTask}
-                  />
-                )}
-                {activeRole === "mentor" && (
-                  <MentorWorkbench students={studentsState} onFeedbackSaved={handleFeedbackSaved} />
-                )}
-                {activeRole === "hr" && <HrWorkbench students={studentsState} />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </section>
-        <OverviewDashboard
-          students={studentsState}
-          weeklyLoading={weeklyLoading}
-          reportVariant={reportVariant}
-          onRegenerate={regenerateReport}
-        />
-        <AiCapabilitySection />
-        <CourseMappingSection />
-        <CultureSection />
-        <ImpactSection />
-        <ClosingCta
-          exported={exported}
-          onExport={() => {
-            setExported(true);
-            scrollToSection("overview");
-          }}
-        />
-      </main>
-    </TooltipProvider>
+    <div className="min-h-screen bg-[#F7FAFF] text-slate-950">
+      <Topbar
+        identity={identity}
+        onIdentityChange={handleIdentityChange}
+        onGenerateReport={() => handleGenerateReport(true)}
+        onReset={handleReset}
+        onShowSolution={() => {
+          setActiveView("solution");
+          showToast("已打开作业提交说明");
+        }}
+        reportLoading={reportLoading}
+        resetLoading={resetLoading}
+      />
+
+      <div className="mx-auto flex w-full max-w-[1500px] gap-4 px-3 pb-8 pt-3 sm:px-4 lg:px-6">
+        <Sidebar activeView={activeView} onChange={setActiveView} />
+        <div className="min-w-0 flex-1">
+          <MobileNav activeView={activeView} onChange={setActiveView} />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeView}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.22 }}
+              className="min-w-0"
+            >
+              {pageLoading ? (
+                <LoadingPanel />
+              ) : (
+                <>
+                  {activeView === "overview" && (
+                    <OverviewPage
+                      students={students}
+                      metrics={metrics}
+                      events={events}
+                      report={report}
+                      onNavigate={setActiveView}
+                      onGenerateReport={() => handleGenerateReport(true)}
+                    />
+                  )}
+                  {activeView === "student" && selectedStudent && (
+                    <StudentWorkspace
+                      students={students}
+                      student={selectedStudent}
+                      selectedStudentId={selectedStudentId}
+                      onSelectStudent={setSelectedStudentId}
+                      onToggleTask={handleTaskToggle}
+                      taskLoadingId={taskLoadingId}
+                    />
+                  )}
+                  {activeView === "mentor" && mentorTarget && (
+                    <MentorWorkspace
+                      students={students}
+                      target={mentorTarget}
+                      targetId={mentorTargetId}
+                      note={mentorNote}
+                      feedbackResult={feedbackResult}
+                      feedbackStudentName={feedbackStudentName}
+                      loading={feedbackLoading}
+                      onSelectTarget={setMentorTargetId}
+                      onNoteChange={setMentorNote}
+                      onSubmit={handleFeedbackSubmit}
+                    />
+                  )}
+                  {activeView === "hrbp" && <HrbpWorkspace students={students} />}
+                  {activeView === "report" && (
+                    <WeeklyReportPage
+                      report={report}
+                      loading={reportLoading}
+                      loadingStep={reportStep}
+                      onGenerate={() => handleGenerateReport(false)}
+                      onCopy={handleCopyReport}
+                      onExport={handleExportMarkdown}
+                    />
+                  )}
+                  {activeView === "events" && <EventsPage events={events} />}
+                  {activeView === "solution" && <SolutionPage />}
+                </>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 18 }}
+            className="fixed bottom-5 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-function Hero({ studentsState }: { studentsState: GrowthStudent[] }) {
-  const focusCount = studentsState.filter((student) => student.riskLevel !== "low").length;
-  const highFit = studentsState.filter((student) => getFitAverage(student) >= 85 && student.riskLevel === "low").length;
-  const avgProgress = average(studentsState.map((student) => student.progress));
-
-  const valueCards = [
-    {
-      title: "实习生",
-      desc: "知道下一步该做什么",
-      icon: GraduationCap,
-      color: "text-cyan-200"
-    },
-    {
-      title: "导师",
-      desc: "标准化带教，不再全凭经验",
-      icon: HeartHandshake,
-      color: "text-emerald-200"
-    },
-    {
-      title: "HR",
-      desc: "看见过程数据，提前识别风险",
-      icon: BarChart3,
-      color: "text-amber-200"
-    }
+function Topbar({
+  identity,
+  onIdentityChange,
+  onGenerateReport,
+  onReset,
+  onShowSolution,
+  reportLoading,
+  resetLoading
+}: {
+  identity: Identity;
+  onIdentityChange: (identity: Identity) => void;
+  onGenerateReport: () => void;
+  onReset: () => void;
+  onShowSolution: () => void;
+  reportLoading: boolean;
+  resetLoading: boolean;
+}) {
+  const identities: { label: Identity; icon: ReactNode }[] = [
+    { label: "实习生", icon: <GraduationCap className="h-4 w-4" /> },
+    { label: "导师", icon: <Handshake className="h-4 w-4" /> },
+    { label: "HRBP", icon: <UsersRound className="h-4 w-4" /> }
   ];
 
   return (
-    <section className="relative min-h-screen px-4 pb-12 pt-6 sm:px-6 lg:px-8">
-      <div className="absolute inset-0 grid-pattern opacity-80" />
-      <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-blue-500/20 blur-3xl" />
-      <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 shadow-inner-glass backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/20 text-cyan-100">
-            <Map className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">鹅苗星图</p>
-            <p className="truncate text-xs text-slate-400">Emiao Growth Map</p>
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/92 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1664FF] text-white shadow-glow">
+              <Map className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-base font-semibold text-slate-950 sm:text-lg">鹅苗星图</h1>
+                <Badge variant="blue">Emiao Growth Map</Badge>
+              </div>
+              <p className="truncate text-xs text-slate-500">腾讯 AI-HR 作业四 · 实习能量站成长导航智能看板</p>
+            </div>
           </div>
         </div>
-        <div className="hidden items-center gap-2 text-sm text-slate-300 md:flex">
-          <button className="rounded-lg px-3 py-2 hover:bg-white/10" onClick={() => scrollToSection("overview")}>
-            总览
-          </button>
-          <button className="rounded-lg px-3 py-2 hover:bg-white/10" onClick={() => scrollToSection("ai-design")}>
-            AI 设计
-          </button>
-          <button className="rounded-lg px-3 py-2 hover:bg-white/10" onClick={() => scrollToSection("impact")}>
-            效果评估
-          </button>
-        </div>
-      </nav>
 
-      <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-10 pt-16 lg:min-h-[calc(100vh-120px)] lg:grid-cols-[1.02fr_0.98fr] lg:pt-8">
-        <div className="min-w-0">
-          <Badge variant="blue" className="mb-5">
-            作业四 · 实习能量站
-          </Badge>
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <h1 className="text-balance text-5xl font-semibold tracking-normal text-white sm:text-6xl lg:text-7xl">
-              鹅苗星图
-            </h1>
-            <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-sm font-medium text-cyan-100">
-              Emiao Growth Map
-            </span>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+            {identities.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => onIdentityChange(item.label)}
+                className={cn(
+                  "flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  identity === item.label
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-slate-600 hover:bg-white/80 hover:text-slate-950"
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
           </div>
-          <h2 className="text-balance text-3xl font-semibold tracking-normal text-cyan-100 sm:text-4xl">
-            AI 实习生成长导航看板
-          </h2>
-          <p className="mt-5 max-w-2xl text-xl leading-8 text-slate-200">
-            让每个新人被看见、被支持、被更好地成长
-          </p>
-          <p className="mt-4 max-w-2xl text-base leading-8 text-slate-300">
-            把实习生、导师和 HR 放到同一张成长地图上，用 AI 连接任务、反馈、风险和适岗信号。
-          </p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            <Badge variant="green">科技向善：AI 辅助支持，不替代人的判断</Badge>
-            <Badge variant="blue">星图视觉 = 创意型 HR</Badge>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={onGenerateReport} disabled={reportLoading} className="cursor-pointer">
+              {reportLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4" />}
+              生成周报
+            </Button>
+            <Button variant="secondary" onClick={onReset} disabled={resetLoading} className="cursor-pointer">
+              {resetLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+              重置演示
+            </Button>
+            <Button variant="outline" onClick={onShowSolution} className="cursor-pointer">
+              <Download className="mr-2 h-4 w-4" />
+              导出说明
+            </Button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Sidebar({ activeView, onChange }: { activeView: ViewId; onChange: (view: ViewId) => void }) {
+  return (
+    <aside className="sticky top-[88px] hidden h-[calc(100vh-110px)] w-72 shrink-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:block">
+      <div className="mb-3 flex items-center gap-2 px-2 py-2 text-sm font-semibold text-slate-700">
+        <PanelLeft className="h-4 w-4 text-blue-600" />
+        产品模块
+      </div>
+      <nav className="space-y-1">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            className={cn(
+              "flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left transition",
+              activeView === item.id
+                ? "bg-blue-50 text-blue-700 ring-1 ring-blue-100"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+            )}
+          >
+            <span className="flex items-center gap-3">
+              {item.icon}
+              <span>
+                <span className="block text-sm font-medium">{item.label}</span>
+                <span className="block text-xs text-slate-400">{item.hint}</span>
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        ))}
+      </nav>
+      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+        AI 风险判断只作为沟通线索，不直接作为留用、淘汰或评价依据。
+      </div>
+    </aside>
+  );
+}
+
+function MobileNav({ activeView, onChange }: { activeView: ViewId; onChange: (view: ViewId) => void }) {
+  return (
+    <div className="mb-3 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:hidden">
+      {navItems.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => onChange(item.id)}
+          className={cn(
+            "flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition",
+            activeView === item.id ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+          )}
+        >
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LoadingPanel() {
+  return (
+    <div className="grid min-h-[70vh] place-items-center rounded-2xl border border-slate-200 bg-white">
+      <div className="text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
+        <p className="mt-3 text-sm font-medium text-slate-600">正在连接鹅苗星图模拟后端...</p>
+      </div>
+    </div>
+  );
+}
+
+function OverviewPage({
+  students,
+  metrics,
+  events,
+  report,
+  onNavigate,
+  onGenerateReport
+}: {
+  students: GrowthStudent[];
+  metrics: DashboardMetrics;
+  events: DemoEvent[];
+  report: WeeklyReport | null;
+  onNavigate: (view: ViewId) => void;
+  onGenerateReport: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <CockpitHero
+        metrics={metrics}
+        events={events}
+        report={report}
+        onNavigate={onNavigate}
+        onGenerateReport={onGenerateReport}
+      />
+      <KpiGrid metrics={metrics} />
+      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <Badge variant="blue">分析型 HR｜从数据看问题</Badge>
+                <Badge variant="green">协作：多角色同步信息</Badge>
+              </div>
+              <CardTitle>本周 HRBP 优先动作</CardTitle>
+              <CardDescription>根据任务、反馈、风险和适岗信号动态生成</CardDescription>
+            </div>
+            <Button variant="outline" onClick={() => onNavigate("hrbp")} className="w-fit cursor-pointer">
+              进入 HRBP 工作台
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            {getPriorityActions(students).map((action, index) => (
+              <div key={action} className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white">
+                  {index + 1}
+                </div>
+                <p className="text-sm leading-7 text-slate-700">{action}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <RecentEventsCard events={events} limit={5} />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RiskDistributionChart metrics={metrics} />
+        <StageRoleChart metrics={metrics} />
+      </div>
+    </div>
+  );
+}
+
+function CockpitHero({
+  metrics,
+  events,
+  report,
+  onNavigate,
+  onGenerateReport
+}: {
+  metrics: DashboardMetrics;
+  events: DemoEvent[];
+  report: WeeklyReport | null;
+  onNavigate: (view: ViewId) => void;
+  onGenerateReport: () => void;
+}) {
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-[#07111F] p-5 text-white shadow-glow sm:p-8">
+      <div className="absolute inset-0 dark-grid-pattern opacity-70" />
+      <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-blue-500/25 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-52 w-52 rounded-full bg-cyan-400/15 blur-3xl" />
+      <div className="relative grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="flex min-h-[430px] flex-col justify-between">
+          <div>
+            <div className="mb-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-100">
+                作业四 · 实习能量站
+              </span>
+              <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                创意型 HR｜鹅苗星图 / 成长能量
+              </span>
+            </div>
+            <p className="text-sm uppercase tracking-[0.24em] text-cyan-100">Emiao Growth Map</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-normal sm:text-5xl">鹅苗星图</h2>
+            <p className="mt-3 text-2xl font-semibold text-cyan-100">AI 实习生成长导航看板</p>
+            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300">
+              让实习生、导师、HRBP 在同一张成长地图上协作。AI 负责整理、提醒、归纳，人负责判断、沟通和信任建立。
+            </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" className="shimmer-surface" onClick={() => scrollToSection("demo")}>
-              开始体验
-              <ArrowRight className="ml-2 h-5 w-5" />
+            <Button onClick={() => onNavigate("hrbp")} className="cursor-pointer">
+              进入 HRBP 工作台
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-            <Button size="lg" variant="secondary" onClick={() => scrollToSection("ai-design")}>
-              查看方案逻辑
-              <Sparkles className="ml-2 h-5 w-5" />
+            <Button variant="dark" onClick={() => onNavigate("student")} className="cursor-pointer border border-white/15">
+              体验实习生视角
+              <GraduationCap className="ml-2 h-4 w-4" />
+            </Button>
+            <Button variant="dark" onClick={onGenerateReport} className="cursor-pointer border border-white/15">
+              生成 AI 周报
+              <WandSparkles className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </div>
-        <ProductPreview avgProgress={avgProgress} focusCount={focusCount} highFit={highFit} />
-      </div>
 
-      <div className="relative z-10 mx-auto mt-8 grid max-w-7xl gap-4 md:grid-cols-3">
-        {valueCards.map((card) => (
-          <Card key={card.title} className="border-beam">
-            <CardHeader className="pb-3">
-              <card.icon className={cn("h-6 w-6", card.color)} />
-              <CardTitle>{card.title}</CardTitle>
-              <CardDescription>{card.desc}</CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProductPreview({
-  avgProgress,
-  focusCount,
-  highFit
-}: {
-  avgProgress: number;
-  focusCount: number;
-  highFit: number;
-}) {
-  const miniCards = [
-    {
-      title: "AI 周报",
-      value: `${avgProgress}%`,
-      desc: "平均成长进度",
-      icon: FileText,
-      color: "text-cyan-100"
-    },
-    {
-      title: "风险提醒",
-      value: `${focusCount} 人`,
-      desc: "需 HRBP 关注",
-      icon: CircleAlert,
-      color: "text-amber-100"
-    },
-    {
-      title: "成长路径",
-      value: `${highFit} 人`,
-      desc: "高适岗信号",
-      icon: BadgeCheck,
-      color: "text-emerald-100"
-    }
-  ];
-
-  return (
-    <div className="border-beam relative mx-auto w-full max-w-[560px] rounded-2xl border border-white/10 bg-white/[0.075] p-3 shadow-glow backdrop-blur-xl sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-3 px-1">
-        <div>
-          <p className="text-sm font-semibold text-white">真实产品预览</p>
-          <p className="text-xs text-slate-400">任务、反馈、风险在同一张图里流动</p>
-        </div>
-        <Badge variant="green">创造：带教流程产品化</Badge>
-      </div>
-      <StarMap />
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        {miniCards.map((item) => (
-          <div key={item.title} className="rounded-xl border border-white/10 bg-[#07111F]/75 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <item.icon className={cn("h-4 w-4", item.color)} />
-              <span className="text-lg font-semibold text-white">{item.value}</span>
+        <div className="relative min-w-0">
+          <div className="pointer-events-none absolute -right-28 -top-16 w-[360px] opacity-25 sm:w-[430px]">
+            <StarMap />
+          </div>
+          <div className="relative rounded-2xl border border-white/10 bg-white/[0.08] p-4 shadow-inner-glass backdrop-blur-xl">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">产品驾驶舱预览</p>
+                <p className="text-xs text-slate-400">所有指标来自模拟后端 API</p>
+              </div>
+              <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-100">
+                技术应用型 HR｜API / AI 周报 / 状态联动
+              </span>
             </div>
-            <p className="text-sm font-medium text-white">{item.title}</p>
-            <p className="mt-1 text-xs text-slate-400">{item.desc}</p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <DarkMiniStat label="实习生总数" value={`${metrics.total}`} />
+              <DarkMiniStat label="任务完成率" value={`${metrics.averageProgress}%`} />
+              <DarkMiniStat label="需关注人数" value={`${metrics.focusCount}`} tone="warning" />
+              <DarkMiniStat label="高适岗信号" value={`${metrics.highFitCount}`} tone="success" />
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_0.85fr]">
+              <div className="rounded-xl border border-white/10 bg-[#07111F]/72 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+                  <BrainCircuit className="h-4 w-4 text-cyan-200" />
+                  AI 周报摘要
+                </div>
+                <p className="text-sm leading-7 text-slate-300">
+                  {report?.overview ??
+                    `当前平均任务完成率 ${metrics.averageProgress}%，需关注 ${metrics.focusCount} 人。建议先进入 HRBP 工作台查看适岗证据链，再生成本周周报。`}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#07111F]/72 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+                  <Clock3 className="h-4 w-4 text-emerald-200" />
+                  最近操作动态
+                </div>
+                <div className="space-y-2">
+                  {events.slice(0, 3).map((event) => (
+                    <p key={event.id} className="line-clamp-2 rounded-lg bg-white/[0.06] px-3 py-2 text-xs leading-5 text-slate-300">
+                      {event.message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DarkMiniStat({ label, value, tone }: { label: string; value: string; tone?: "warning" | "success" }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#07111F]/70 p-3">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p
+        className={cn(
+          "mt-2 text-2xl font-semibold text-white",
+          tone === "warning" && "text-amber-100",
+          tone === "success" && "text-emerald-100"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function KpiGrid({ metrics }: { metrics: DashboardMetrics }) {
+  const cards = [
+    { label: "实习生总数", value: `${metrics.total}`, icon: UsersRound, desc: "来自 /api/students" },
+    { label: "平均任务完成率", value: `${metrics.averageProgress}%`, icon: Target, desc: "任务勾选后实时变化" },
+    { label: "导师反馈及时率", value: `${metrics.feedbackTimelyRate}%`, icon: MessageSquareText, desc: "反馈次数驱动风险变化" },
+    { label: "需关注人数", value: `${metrics.focusCount}`, icon: CircleAlert, desc: "任务、反馈、目标信号综合" },
+    { label: "高适岗信号", value: `${metrics.highFitCount}`, icon: BadgeCheck, desc: "适岗均分与低风险共同判断" }
+  ];
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {cards.map((card) => (
+        <Card key={card.label} className="group cursor-default transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+          <CardHeader className="pb-3">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <card.icon className="h-5 w-5" />
+            </div>
+            <CardDescription>{card.label}</CardDescription>
+            <CardTitle className="text-3xl">{card.value}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-slate-500">{card.desc}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function RecentEventsCard({ events, limit = 5 }: { events: DemoEvent[]; limit?: number }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle>最近操作日志</CardTitle>
+            <CardDescription>来自 GET /api/events</CardDescription>
+          </div>
+          <Badge variant="blue">真实数据感</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {events.slice(0, limit).map((event) => (
+          <div key={event.id} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+            <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
+            <div className="min-w-0">
+              <p className="text-sm leading-6 text-slate-700">{event.message}</p>
+              <p className="mt-1 text-xs text-slate-400">{event.createdAt}</p>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RiskDistributionChart({ metrics }: { metrics: DashboardMetrics }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>风险分布图</CardTitle>
+        <CardDescription>任务滞后 / 反馈缺失 / 目标不清 / 融入慢</CardDescription>
+      </CardHeader>
+      <CardContent className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={metrics.riskCounts} margin={{ left: -16, right: 8 }}>
+            <CartesianGrid vertical={false} stroke="#E2E8F0" />
+            <XAxis dataKey="name" tick={{ fill: "#475569", fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fill: "#475569", fontSize: 12 }} axisLine={false} tickLine={false} />
+            <ChartTooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(22,100,255,0.08)" }} />
+            <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+              {metrics.riskCounts.map((entry, index) => (
+                <Cell key={entry.name} fill={chartColors[index + 1]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StageRoleChart({ metrics }: { metrics: DashboardMetrics }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>岗位与阶段分布</CardTitle>
+        <CardDescription>帮助 HRBP 判断支持资源投放位置</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 lg:grid-cols-2">
+        <MiniBarList title="岗位分布" data={metrics.roleDistribution} />
+        <MiniBarList title="成长阶段" data={metrics.stageDistribution} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniBarList({ title, data }: { title: string; data: { name: string; value: number }[] }) {
+  const max = Math.max(...data.map((item) => item.value), 1);
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <p className="mb-4 text-sm font-semibold text-slate-800">{title}</p>
+      <div className="space-y-3">
+        {data.map((item, index) => (
+          <div key={item.name}>
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+              <span>{item.name}</span>
+              <span>{item.value}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-200">
+              <div
+                className="h-2 rounded-full"
+                style={{
+                  width: `${Math.max(8, (item.value / max) * 100)}%`,
+                  backgroundColor: chartColors[index % chartColors.length]
+                }}
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -453,706 +900,401 @@ function ProductPreview({
   );
 }
 
-function ProblemDiagnosis() {
-  const problems = [
-    {
-      title: "实习生迷茫",
-      desc: "不知道不同阶段该学什么、交付什么、做到什么程度。",
-      consequence: "成长靠猜，主动性容易被误判。",
-      ai: "AI 根据阶段、岗位任务和风险信号生成下一步建议。",
-      icon: CircleAlert
-    },
-    {
-      title: "导师凭经验",
-      desc: "带教节奏和反馈标准不统一。",
-      consequence: "同一批新人获得的支持不均衡。",
-      ai: "AI 提醒反馈节点，把观察转成结构化成长证据。",
-      icon: ClipboardCheck
-    },
-    {
-      title: "HR 信息断点",
-      desc: "进度、风险、适岗情况散落在私聊里。",
-      consequence: "HRBP 很难提前识别风险和高潜信号。",
-      ai: "AI 汇总任务、反馈、风险，形成可追溯周报。",
-      icon: Network
-    }
-  ];
-
-  return (
-    <section className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="问题诊断"
-          title="这不是“做一张表”，而是把新人支持机制产品化"
-          description="作业四的核心不是更严地管理实习生，而是让成长过程从私聊和经验里浮出来，让每个角色都能在合适时间做出更好的支持动作。"
-        />
-        <div className="grid gap-4 md:grid-cols-3">
-          {problems.map((problem) => (
-            <Card key={problem.title} className="group transition hover:-translate-y-1 hover:border-cyan-300/30">
-              <CardHeader>
-                <problem.icon className="h-7 w-7 text-cyan-200" />
-                <CardTitle>{problem.title}</CardTitle>
-                <CardDescription>{problem.desc}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="rounded-lg bg-red-500/10 p-3 text-red-100">
-                  后果：{problem.consequence}
-                </div>
-                <div className="rounded-lg bg-blue-500/10 p-3 text-blue-100">
-                  AI 介入点：{problem.ai}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function BeforeAfterSection() {
-  const before = ["私聊问进度", "导师凭经验", "HR 看不到风险"];
-  const after = ["任务上墙", "反馈沉淀", "风险可追踪", "适岗有证据"];
-
-  return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="border-red-300/15">
-            <CardHeader>
-              <Badge variant="red" className="w-fit">Before</Badge>
-              <CardTitle>原来的带教流程散落在私聊里</CardTitle>
-              <CardDescription>每个人都在努力，但信息没有沉淀成共同视图。</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {before.map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-xl bg-white/[0.055] p-3 text-sm text-slate-200">
-                  <CircleAlert className="h-4 w-4 shrink-0 text-red-200" />
-                  {item}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card className="border-emerald-300/20">
-            <CardHeader>
-              <Badge variant="green" className="w-fit">After</Badge>
-              <CardTitle>鹅苗星图把成长闭环拉到同一张看板</CardTitle>
-              <CardDescription>多角色同步信息，风险有证据，适岗判断有过程。</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {after.map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-xl bg-emerald-400/10 p-3 text-sm text-emerald-50">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-200" />
-                  {item}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RoleEntrance({
-  activeRole,
-  onChange
-}: {
-  activeRole: ActiveRole;
-  onChange: (role: ActiveRole) => void;
-}) {
-  const roles = [
-    {
-      id: "student" as const,
-      label: "我是实习生",
-      desc: "看清本周任务、阶段目标和 AI 陪跑建议",
-      icon: UserRound,
-      culture: "用户为本"
-    },
-    {
-      id: "mentor" as const,
-      label: "我是导师",
-      desc: "看带教清单，快速生成有温度的反馈",
-      icon: Handshake,
-      culture: "协作"
-    },
-    {
-      id: "hr" as const,
-      label: "我是 HR / HRBP",
-      desc: "看 20 位实习生全景、风险和适岗信号",
-      icon: UsersRound,
-      culture: "正直"
-    }
-  ];
-
-  return (
-    <div>
-      <SectionTitle
-        eyebrow="角色入口"
-        tag="沟通型 HR"
-        title="同一张成长地图，三种角色工作台"
-        description="用户为本不是只服务一个角色。实习生看到下一步，导师看到带教节奏，HR 看到过程数据。"
-      />
-      <div className="grid gap-4 md:grid-cols-3">
-        {roles.map((role) => {
-          const isActive = role.id === activeRole;
-          return (
-            <button
-              key={role.id}
-              onClick={() => onChange(role.id)}
-              className={cn(
-                "min-w-0 rounded-xl border p-5 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-300",
-                isActive
-                  ? "border-cyan-300/50 bg-cyan-400/[0.12] shadow-glow"
-                  : "border-white/10 bg-white/[0.06] hover:border-white/20 hover:bg-white/[0.1]"
-              )}
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/10 text-cyan-100">
-                  <role.icon className="h-6 w-6" />
-                </div>
-                <Badge variant={isActive ? "green" : "default"}>{role.culture}</Badge>
-              </div>
-              <h3 className="text-lg font-semibold text-white">{role.label}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{role.desc}</p>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function OverviewDashboard({
+function StudentWorkspace({
   students,
-  weeklyLoading,
-  reportVariant,
-  onRegenerate
-}: {
-  students: GrowthStudent[];
-  weeklyLoading: boolean;
-  reportVariant: number;
-  onRegenerate: () => void;
-}) {
-  const total = students.length;
-  const taskRate = average(students.map((student) => student.progress));
-  const feedbackRate = Math.round((students.filter((student) => student.feedbackCount >= 2).length / total) * 100);
-  const focusCount = students.filter((student) => student.riskLevel !== "low").length;
-  const highFit = students.filter((student) => getFitAverage(student) >= 85 && student.riskLevel === "low").length;
-
-  const roleDistribution = ["研发", "产品", "销售"].map((role) => ({
-    name: role,
-    value: students.filter((student) => student.role === role).length
-  }));
-
-  const stageDistribution = growthStages.map((stage) => ({
-    name: stage,
-    value: students.filter((student) => student.stage === stage).length
-  }));
-
-  const riskDistribution = ["任务滞后", "反馈缺失", "目标不清", "融入慢"].map((reason) => ({
-    name: reason,
-    value: students.filter((student) => getRiskReasons(student).includes(reason)).length
-  }));
-
-  const kpis = [
-    { label: "实习生总数", value: `${total}`, icon: UsersRound, color: "text-cyan-200" },
-    { label: "本周任务完成率", value: `${taskRate}%`, icon: CheckCircle2, color: "text-emerald-200" },
-    { label: "导师反馈及时率", value: `${feedbackRate}%`, icon: Clock3, color: "text-amber-200" },
-    { label: "需关注人数", value: `${focusCount}`, icon: CircleAlert, color: "text-red-200" },
-    { label: "高适岗信号", value: `${highFit}`, icon: BadgeCheck, color: "text-blue-200" }
-  ];
-
-  return (
-    <section id="overview" className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="总览看板"
-          tag="分析型 HR"
-          title="HRBP 能一眼看懂这批新人的状态"
-          description="总览 KPI、风险图表和 AI 周报都来自当前 studentsState；任务和反馈变化后，这里会同步更新。"
-        />
-        <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr]">
-          <CultureRibbon
-            items={[
-              "进取：阶段任务推动成长",
-              "正直：风险判断有证据",
-              "科技向善：AI 只辅助支持"
-            ]}
-          />
-          <HrPriorityCard students={students} compact />
-        </div>
-        <div className="grid gap-4 md:grid-cols-5">
-          {kpis.map((kpi) => (
-            <Card key={kpi.label} className="min-h-[132px]">
-              <CardHeader className="pb-2">
-                <kpi.icon className={cn("h-5 w-5", kpi.color)} />
-                <CardDescription>{kpi.label}</CardDescription>
-                <CardTitle className="text-3xl">{kpi.value}</CardTitle>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_1.08fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>岗位分布</CardTitle>
-              <CardDescription>研发 / 产品 / 销售</CardDescription>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={roleDistribution} innerRadius={56} outerRadius={88} dataKey="value" paddingAngle={4}>
-                    {roleDistribution.map((entry, index) => (
-                      <Cell key={entry.name} fill={chartColors[index]} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip contentStyle={tooltipStyle} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>成长阶段分布</CardTitle>
-              <CardDescription>入营 → 上手 → 协同 → 产出 → 适岗复盘</CardDescription>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stageDistribution}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: "#CBD5E1", fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#CBD5E1", fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <ChartTooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#00C2FF" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card className="border-beam">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    <Badge variant="blue">技术应用型 HR</Badge>
-                    <Badge variant="green">AI 周报联动</Badge>
-                  </div>
-                  <CardTitle>AI 本周成长简报</CardTitle>
-                  <CardDescription>根据当前任务、反馈和风险实时生成</CardDescription>
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      onClick={onRegenerate}
-                      disabled={weeklyLoading}
-                      aria-label="重新生成周报"
-                    >
-                      {weeklyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>重新生成周报</TooltipContent>
-                </Tooltip>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {weeklyLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-11/12" />
-                  <Skeleton className="h-4 w-10/12" />
-                </div>
-              ) : (
-                <p className="text-sm leading-7 text-slate-200">{getWeeklySummary(students, reportVariant)}</p>
-              )}
-              <div className="mt-5 h-36">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={riskDistribution} layout="vertical">
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" tick={{ fill: "#CBD5E1", fontSize: 12 }} axisLine={false} tickLine={false} width={72} />
-                    <ChartTooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="value" radius={[0, 8, 8, 0]} fill="#F59E0B" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function StudentWorkbench({
-  students,
+  student,
   selectedStudentId,
   onSelectStudent,
-  onToggleTask
+  onToggleTask,
+  taskLoadingId
 }: {
   students: GrowthStudent[];
+  student: GrowthStudent;
   selectedStudentId: string;
-  onSelectStudent: (studentId: string) => void;
-  onToggleTask: (studentId: string, taskId: string) => void;
+  onSelectStudent: (id: string) => void;
+  onToggleTask: (student: GrowthStudent, taskId: string) => void;
+  taskLoadingId: string | null;
 }) {
-  const student = students.find((item) => item.id === selectedStudentId) ?? students[0];
   const tasks = roleTasks[student.role];
-  const doneCount = student.completedTaskIds.length;
-  const risk = getRiskMeta(student.riskLevel);
+  const riskReasons = getRiskReasons(student);
 
   return (
-    <Card className="border-cyan-300/20">
-      <CardHeader>
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-          <div className="min-w-0">
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="实习生工作台"
+        title="今天我该先完成哪一步？"
+        description="实习生端不做管理压迫，而是把阶段任务、导师反馈和 AI 陪跑建议放在一个清楚的行动面板里。"
+        badges={["用户为本：新人也有自己的工作台", "进取：阶段任务推动成长"]}
+      />
+      <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
+        <Card>
+          <CardHeader>
             <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="green">实习生工作台</Badge>
-              <Badge variant="blue">进取：阶段任务推动成长</Badge>
+              <Badge variant="blue">创意型 HR｜成长能量</Badge>
+              <Badge variant={getRiskBadgeVariant(student.riskLevel)}>{getRiskMeta(student.riskLevel).label}</Badge>
             </div>
-            <CardTitle className="text-2xl">{student.role}实习生 / {student.stage}</CardTitle>
-            <CardDescription>不同岗位看到不同任务，AI 陪跑建议会跟随岗位和风险变化。</CardDescription>
-          </div>
-          <label className="w-full min-w-0 md:w-72">
-            <span className="mb-2 block text-xs text-slate-400">选择实习生</span>
+            <CardTitle>选择实习生</CardTitle>
+            <CardDescription>切换不同岗位，任务会自动变化</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <select
-              value={student.id}
+              value={selectedStudentId}
               onChange={(event) => onSelectStudent(event.target.value)}
-              className="h-11 w-full rounded-lg border border-white/[0.12] bg-[#07111F] px-3 text-sm text-white outline-none ring-blue-400 transition focus:ring-2"
+              className="h-11 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               {students.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} · {item.role} · {item.stage}
+                  {item.name}｜{item.role}｜导师 {item.mentor}
                 </option>
               ))}
             </select>
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <MiniStat label="成长能量值" value={`${student.energy}`} />
-            <MiniStat label="任务完成率" value={`${student.progress}%`} />
-            <MiniStat label="导师反馈" value={`${student.feedbackCount} 次`} />
-            <MiniStat label="风险状态" value={risk.label} tone={student.riskLevel} />
-          </div>
-          <div>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-semibold text-white">我的成长地图</h3>
-              <Badge variant="blue">Day 1 / 7 / 14 / 30 / 60 / 90</Badge>
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-slate-500">当前身份</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-950">{student.role}实习生 / 第 3 周</p>
+                </div>
+                <div className="rounded-xl bg-white px-4 py-3 text-right shadow-sm">
+                  <p className="text-xs text-slate-500">成长能量值</p>
+                  <p className="text-3xl font-semibold text-blue-600">{student.energy}</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                <MetricLine label="任务进度" value={student.progress} />
+                <MetricLine label="适岗均分" value={getFitAverage(student)} />
+              </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-5">
-              {growthStages.map((stage) => {
-                const activeIndex = growthStages.indexOf(student.stage);
-                const stageIndex = growthStages.indexOf(stage);
-                return (
-                  <div
-                    key={stage}
-                    className={cn(
-                      "rounded-xl border p-3 text-center text-sm",
-                      stage === student.stage
-                        ? "border-cyan-300/50 bg-cyan-300/[0.12] text-cyan-50"
-                        : stageIndex < activeIndex
-                          ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
-                          : "border-white/10 bg-white/[0.05] text-slate-300"
-                    )}
-                  >
-                    {stage}
-                  </div>
-                );
-              })}
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-800">
+              AI 陪跑建议：{getCoachAdvice(student)}
             </div>
-          </div>
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold text-white">{student.role}岗位本周任务</h3>
-              <span className="text-sm text-slate-300">{doneCount}/{tasks.length}</span>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">当前风险线索</p>
+              <div className="flex flex-wrap gap-2">
+                {(riskReasons.length ? riskReasons : ["暂无明显风险"]).map((reason) => (
+                  <Badge key={reason} variant={riskReasons.length ? "yellow" : "green"}>
+                    {reason}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <Progress value={student.progress} className="mb-4" />
-            <div className="grid gap-3">
-              {tasks.map((task) => {
-                const completed = student.completedTaskIds.includes(task.id);
-                return (
-                  <button
-                    key={task.id}
-                    onClick={() => onToggleTask(student.id, task.id)}
-                    className={cn(
-                      "flex min-w-0 items-start gap-3 rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-300",
-                      completed
-                        ? "border-emerald-300/30 bg-emerald-400/10"
-                        : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"
-                    )}
-                  >
-                    <span
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>我的成长路径</CardTitle>
+                <CardDescription>入营 → 上手 → 协同 → 产出 → 适岗复盘</CardDescription>
+              </div>
+              <Badge variant="green">科技向善：把支持做得更及时</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <GrowthPath currentStage={student.stage} />
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-800">本周岗位任务</p>
+                <Badge variant="blue">{student.role}路径</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {tasks.map((task) => {
+                  const completed = student.completedTaskIds.includes(task.id);
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => onToggleTask(student, task.id)}
                       className={cn(
-                        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                        completed
-                          ? "border-emerald-300 bg-emerald-400 text-slate-950"
-                          : "border-white/20 text-transparent"
+                        "group flex min-h-[112px] cursor-pointer items-start gap-3 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md",
+                        completed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white hover:border-blue-200"
                       )}
                     >
-                      <Check className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-slate-100">{task.title}</span>
-                      <span className="mt-1 block text-xs leading-5 text-slate-400">{task.evidence}</span>
-                    </span>
-                  </button>
-                );
-              })}
+                      <span
+                        className={cn(
+                          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+                          completed ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-slate-400"
+                        )}
+                      >
+                        {taskLoadingId === task.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : completed ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-slate-900">{task.title}</span>
+                        <span className="mt-2 block text-sm leading-6 text-slate-500">{task.evidence}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-5">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-300/15">
-              <WandSparkles className="h-5 w-5 text-cyan-100" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-white">AI 陪跑建议</h3>
-              <p className="text-xs text-slate-300">根据岗位、进度、风险动态生成</p>
-            </div>
-          </div>
-          <p className="text-sm leading-7 text-cyan-50">{getCoachAdvice(student)}</p>
-          <div className="mt-5 rounded-lg bg-white/10 p-3 text-sm leading-6 text-slate-200">
-            这不是管理提醒，而是成长提醒：把问题说清楚、把反馈记下来，本身就是被看见的成长证据。
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {getRiskReasons(student).length ? (
-              getRiskReasons(student).map((reason) => (
-                <Badge key={reason} variant="yellow">{reason}</Badge>
-              ))
-            ) : (
-              <Badge variant="green">节奏稳定</Badge>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
-function MentorWorkbench({
-  students,
-  onFeedbackSaved
-}: {
-  students: GrowthStudent[];
-  onFeedbackSaved: (studentId: string, feedback: MentorFeedback) => void;
-}) {
-  const waitingList = students.filter((student) => student.feedbackCount < 2 || getRiskReasons(student).includes("反馈缺失"));
-  const initialTarget = waitingList[0]?.id ?? students[0]?.id ?? "";
-  const [targetId, setTargetId] = useState(initialTarget);
-  const [observation, setObservation] = useState("");
-  const [feedback, setFeedback] = useState<MentorFeedback | null>(null);
-  const [loading, setLoading] = useState(false);
-  const target = students.find((student) => student.id === targetId) ?? students[0];
-  const timelyRate = Math.round((students.filter((student) => student.feedbackCount >= 2).length / students.length) * 100);
-
-  const generateFeedback = () => {
-    if (!target) return;
-    setLoading(true);
-    window.setTimeout(() => {
-      const generated = buildFeedbackBlocks(target, observation);
-      setFeedback(generated);
-      onFeedbackSaved(target.id, generated);
-      setObservation("");
-      setLoading(false);
-    }, 700);
-  };
+function GrowthPath({ currentStage }: { currentStage: GrowthStage }) {
+  const timeMarks = ["Day 1", "Day 7", "Day 14", "Day 30", "Day 60"];
+  const currentIndex = growthStages.indexOf(currentStage);
 
   return (
-    <Card className="border-emerald-300/20">
-      <CardHeader>
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-          <div>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="green">导师工作台</Badge>
-              <Badge variant="blue">技术应用型 HR</Badge>
-              <Badge variant="green">协作：导师与 HR 同步信息</Badge>
-            </div>
-            <CardTitle className="text-2xl">今日带教清单</CardTitle>
-            <CardDescription>把经验沉淀成节奏，把观察转成可写回学生档案的反馈。</CardDescription>
+    <div className="grid gap-3 md:grid-cols-5">
+      {growthStages.map((stage, index) => {
+        const active = index <= currentIndex;
+        return (
+          <div
+            key={stage}
+            className={cn(
+              "relative rounded-2xl border p-4",
+              active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"
+            )}
+          >
+            <p className={cn("text-xs", active ? "text-blue-600" : "text-slate-400")}>{timeMarks[index]}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">{stage}</p>
+            {stage === currentStage && (
+              <span className="mt-3 inline-flex rounded-full bg-blue-600 px-2.5 py-1 text-xs font-medium text-white">当前阶段</span>
+            )}
           </div>
-          <label className="w-full min-w-0 lg:w-80">
-            <span className="mb-2 block text-xs text-slate-400">选择反馈对象</span>
-            <select
-              value={target?.id}
-              onChange={(event) => {
-                setTargetId(event.target.value);
-                setFeedback(null);
-              }}
-              className="h-11 w-full rounded-lg border border-white/[0.12] bg-[#07111F] px-3 text-sm text-white outline-none ring-blue-400 transition focus:ring-2"
-            >
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name} · {student.role} · 已反馈 {student.feedbackCount} 次
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="grid gap-4">
-          <MiniStat label="反馈及时率" value={`${timelyRate}%`} />
-          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold text-white">待反馈列表</h3>
-              <Badge variant={waitingList.length ? "yellow" : "green"}>{waitingList.length} 人</Badge>
-            </div>
-            <div className="space-y-2">
-              {(waitingList.length ? waitingList : students.slice(0, 3)).map((student) => (
-                <button
-                  key={student.id}
-                  onClick={() => {
-                    setTargetId(student.id);
-                    setFeedback(null);
-                  }}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg bg-white/[0.055] px-3 py-2 text-left text-sm transition hover:bg-white/10"
-                >
-                  <span className="min-w-0 truncate text-slate-200">{student.name} · {student.role}</span>
-                  <span className="shrink-0 text-xs text-slate-400">{student.feedbackCount} 次</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
-            <h3 className="mb-2 font-semibold text-white">本周 1v1 提醒</h3>
-            <p className="text-sm leading-6 text-slate-300">
-              优先覆盖反馈少于 2 次、目标不清、任务滞后的同学。AI 只整理线索，真正的沟通仍由导师完成。
-            </p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.06] p-5">
-          <div className="mb-4 flex items-center gap-3">
-            <BrainCircuit className="h-6 w-6 text-cyan-100" />
-            <div>
-              <h3 className="font-semibold text-white">AI 反馈生成器</h3>
-              <p className="text-sm text-slate-300">生成后会写入 {target?.name} 的学生详情。</p>
-            </div>
-          </div>
-          <Textarea
-            value={observation}
-            onChange={(event) => setObservation(event.target.value)}
-            placeholder="输入你观察到的实习生表现，例如：能主动提问，但需求拆解还不够深入。"
-          />
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button onClick={generateFeedback} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              生成并写入反馈
-            </Button>
-            <p className="text-xs text-slate-400">反馈会更新 lastFeedback、feedbackCount、tags 和风险状态。</p>
-          </div>
-          {feedback && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-5 grid gap-3"
-            >
-              <FeedbackBlock title="肯定" content={feedback.praise} tone="green" />
-              <FeedbackBlock title="建议" content={feedback.suggestion} tone="blue" />
-              <FeedbackBlock title="下周行动" content={feedback.action} tone="yellow" />
-            </motion.div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        );
+      })}
+    </div>
   );
 }
 
-function HrWorkbench({ students }: { students: GrowthStudent[] }) {
+function MentorWorkspace({
+  students,
+  target,
+  targetId,
+  note,
+  feedbackResult,
+  feedbackStudentName,
+  loading,
+  onSelectTarget,
+  onNoteChange,
+  onSubmit
+}: {
+  students: GrowthStudent[];
+  target: GrowthStudent;
+  targetId: string;
+  note: string;
+  feedbackResult: MentorFeedback | null;
+  feedbackStudentName: string;
+  loading: boolean;
+  onSelectTarget: (id: string) => void;
+  onNoteChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const pendingStudents = [...students]
+    .filter((student) => student.feedbackCount < 2 || student.riskLevel !== "low")
+    .sort((a, b) => b.progress - a.progress)
+    .slice(0, 7);
+  const feedbackRate = Math.round((students.filter((student) => student.feedbackCount >= 2).length / students.length) * 100);
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="导师工作台"
+        title="把自然观察变成可沉淀的成长反馈"
+        description="AI 只整理反馈线索，真正的沟通分寸、信任建立和关键判断仍由导师完成。"
+        badges={["沟通型 HR｜连接业务、导师与新人", "科技向善：AI 辅助支持"]}
+      />
+      <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>导师反馈及时率</CardTitle>
+              <CardDescription>反馈生成后会写回学生档案和 HRBP 看板</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-semibold text-blue-600">{feedbackRate}%</div>
+              <Progress value={feedbackRate} className="mt-4" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>待反馈列表</CardTitle>
+              <CardDescription>优先处理反馈少、风险高的同学</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {pendingStudents.map((student) => (
+                <button
+                  key={student.id}
+                  onClick={() => onSelectTarget(student.id)}
+                  className={cn(
+                    "flex w-full cursor-pointer items-center justify-between rounded-xl border p-3 text-left transition hover:border-blue-200 hover:bg-blue-50",
+                    targetId === student.id ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-white"
+                  )}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">{student.name}</span>
+                    <span className="block text-xs text-slate-500">
+                      {student.role} · 反馈 {student.feedbackCount} 次
+                    </span>
+                  </span>
+                  <Badge variant={getRiskBadgeVariant(student.riskLevel)}>{getRiskMeta(student.riskLevel).label}</Badge>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>AI 反馈生成器</CardTitle>
+                <CardDescription>选择对象，输入观察，生成“肯定 / 建议 / 下周行动”三段反馈</CardDescription>
+              </div>
+              <Badge variant="blue">技术应用型 HR｜AI 反馈</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">选择反馈对象</label>
+                <select
+                  value={targetId}
+                  onChange={(event) => onSelectTarget(event.target.value)}
+                  className="h-11 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.name}｜{student.role}｜{student.stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">{target.name} 的当前上下文</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  进度 {target.progress}% · 能量 {target.energy} · 风险 {getRiskReasons(target).join("、") || "暂无明显风险"} ·
+                  下一步：{target.nextAction}
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">输入你的观察</label>
+              <Textarea
+                value={note}
+                onChange={(event) => onNoteChange(event.target.value)}
+                placeholder="例如：能主动提问，但需求拆解还不够深入。"
+                className="min-h-[132px] bg-white text-slate-900 placeholder:text-slate-400"
+              />
+            </div>
+            <Button onClick={onSubmit} disabled={loading} className="cursor-pointer">
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4" />}
+              生成并写入反馈
+            </Button>
+            {feedbackResult && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid gap-3 lg:grid-cols-3">
+                <FeedbackBlock title={`肯定｜${feedbackStudentName}`} content={feedbackResult.praise} tone="green" />
+                <FeedbackBlock title="建议" content={feedbackResult.suggestion} tone="blue" />
+                <FeedbackBlock title="下周行动" content={feedbackResult.action} tone="yellow" />
+              </motion.div>
+            )}
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-800">
+              AI 只是把观察整理成反馈草稿。真正是否这样说、什么时候说、用什么语气说，仍由导师根据关系和场景把握。
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function HrbpWorkspace({ students }: { students: GrowthStudent[] }) {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("全部");
-  const [growthFilter, setGrowthFilter] = useState<GrowthFilter>("全部");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("全部");
+  const [stageFilter, setStageFilter] = useState<StageFilter>("全部");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-
-  const filteredStudents = useMemo(() => {
-    return students.filter((student) => {
-      const roleMatched = roleFilter === "全部" || student.role === roleFilter;
-      const growthMatched =
-        growthFilter === "全部" ||
-        (growthFilter === "稳定成长" && student.riskLevel === "low") ||
-        (growthFilter === "需关注" && student.riskLevel !== "low") ||
-        (growthFilter === "高适岗" && getFitAverage(student) >= 85 && student.riskLevel === "low");
-      return roleMatched && growthMatched;
-    });
-  }, [roleFilter, growthFilter, students]);
-
+  const filteredStudents = students.filter((student) => {
+    const matchRole = roleFilter === "全部" || student.role === roleFilter;
+    const matchStage = stageFilter === "全部" || student.stage === stageFilter;
+    const matchStatus = statusFilter === "全部" || getStudentStatus(student) === statusFilter;
+    return matchRole && matchStage && matchStatus;
+  });
   const selectedStudent = students.find((student) => student.id === selectedStudentId) ?? null;
 
   return (
-    <Card className="border-blue-300/20">
-      <CardHeader>
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="blue">HR / HRBP 工作台</Badge>
-              <Badge variant="green">正直：风险判断有证据</Badge>
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="HRBP 工作台"
+        title="把适岗判断从感觉变成证据链"
+        description="这是最适合作品截图的页面：20 名实习生卡片、筛选器、右侧详情抽屉和醒目的适岗证据链。"
+        badges={["正直：风险判断有证据", "用户为本：HRBP 有自己的工作流"]}
+      />
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <CardTitle>实习生适岗看板</CardTitle>
+              <CardDescription>点击卡片或“查看详情”打开右侧抽屉</CardDescription>
             </div>
-            <CardTitle className="text-2xl">20 名实习生全景卡片</CardTitle>
-            <CardDescription>卡片展示进度、反馈次数、风险原因和下一步动作；点击查看适岗证据链。</CardDescription>
+            <div className="flex flex-wrap gap-2">
+              <FilterGroup label="岗位" options={roleOptions} value={roleFilter} onChange={(value) => setRoleFilter(value as RoleFilter)} />
+              <FilterGroup label="状态" options={statusOptions} value={statusFilter} onChange={(value) => setStatusFilter(value as StatusFilter)} />
+              <FilterGroup label="阶段" options={stageOptions} value={stageFilter} onChange={(value) => setStageFilter(value as StageFilter)} />
+            </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <FilterGroup
-              icon={<BriefcaseBusiness className="h-4 w-4" />}
-              options={["全部", "研发", "产品", "销售"]}
-              value={roleFilter}
-              onChange={(value) => setRoleFilter(value as RoleFilter)}
-            />
-            <FilterGroup
-              icon={<Filter className="h-4 w-4" />}
-              options={["全部", "稳定成长", "需关注", "高适岗"]}
-              value={growthFilter}
-              onChange={(value) => setGrowthFilter(value as GrowthFilter)}
-            />
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-7 text-blue-800">
+            本周 HRBP 优先动作：{getPriorityActions(students).join(" ")}
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <HrPriorityCard students={students} />
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {filteredStudents.map((student) => {
-            const risk = getRiskMeta(student.riskLevel);
-            const fitAverage = getFitAverage(student);
-            const reasons = getRiskReasons(student);
-            return (
-              <button
-                key={student.id}
-                onClick={() => setSelectedStudentId(student.id)}
-                className="group min-w-0 rounded-xl border border-white/10 bg-white/[0.055] p-4 text-left transition hover:-translate-y-1 hover:border-cyan-300/35 hover:bg-white/[0.09] focus:outline-none focus:ring-2 focus:ring-cyan-300"
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-semibold text-white">{student.name}</h3>
-                    <p className="mt-1 text-xs text-slate-400">{student.role} · 导师 {student.mentor}</p>
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {filteredStudents.map((student) => {
+              const status = getStudentStatus(student);
+              const reasons = getRiskReasons(student);
+              return (
+                <button
+                  key={student.id}
+                  onClick={() => setSelectedStudentId(student.id)}
+                  className="group min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold text-slate-950">{student.name}</h3>
+                        <Badge variant="blue">{student.role}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">导师 {student.mentor} · {student.stage}</p>
+                    </div>
+                    <Badge variant={status === "高适岗" ? "green" : status === "需关注" ? "yellow" : "blue"}>
+                      {status}
+                    </Badge>
                   </div>
-                  <Badge variant={risk.variant}>{risk.label}</Badge>
-                </div>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <Badge variant="default">{student.stage}</Badge>
-                  {fitAverage >= 85 && <Badge variant="green">高适岗 {fitAverage}</Badge>}
-                </div>
-                <div className="space-y-3">
-                  <MetricLine label="任务进度" value={student.progress} />
-                  <MetricLine label="成长能量" value={student.energy} />
-                </div>
-                <div className="mt-4 grid gap-2 text-xs text-slate-300">
-                  <div className="rounded-lg bg-white/[0.08] p-2">导师反馈：{student.feedbackCount} 次</div>
-                  <div className="rounded-lg bg-white/[0.08] p-2">
-                    风险原因：{reasons.length ? reasons.join("、") : "暂无明显风险"}
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <SmallMetric label="进度" value={`${student.progress}%`} />
+                    <SmallMetric label="能量" value={`${student.energy}`} />
+                    <SmallMetric label="反馈" value={`${student.feedbackCount} 次`} />
                   </div>
-                  <div className="line-clamp-2 rounded-lg bg-cyan-400/10 p-2 text-cyan-50">
-                    下一步：{student.nextAction}
+                  <div className="mt-4 space-y-3">
+                    <MetricLine label="适岗信号" value={getFitAverage(student)} />
+                    <div className="flex flex-wrap gap-2">
+                      {(reasons.length ? reasons : ["稳定成长"]).map((reason) => (
+                        <Badge key={reason} variant={reasons.length ? "yellow" : "green"}>
+                          {reason}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="line-clamp-2 text-sm leading-6 text-slate-600">下一步动作：{student.nextAction}</p>
                   </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-cyan-100">
-                  查看证据链
-                  <ChevronRight className="ml-1 h-4 w-4 transition group-hover:translate-x-1" />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </CardContent>
+                  <div className="mt-4 flex items-center text-sm font-medium text-blue-700">
+                    查看详情
+                    <ChevronRight className="ml-1 h-4 w-4 transition group-hover:translate-x-1" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
       <StudentDetailSheet
         student={selectedStudent}
         open={Boolean(selectedStudent)}
@@ -1160,7 +1302,7 @@ function HrWorkbench({ students }: { students: GrowthStudent[] }) {
           if (!open) setSelectedStudentId(null);
         }}
       />
-    </Card>
+    </div>
   );
 }
 
@@ -1173,9 +1315,7 @@ function StudentDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  if (!student) {
-    return <Sheet open={open} onOpenChange={onOpenChange} />;
-  }
+  if (!student) return <Sheet open={open} onOpenChange={onOpenChange} />;
 
   const radarData = [
     { subject: "业务理解", value: student.fitSignals.businessUnderstanding },
@@ -1184,73 +1324,55 @@ function StudentDetailSheet({
     { subject: "执行质量", value: student.fitSignals.execution },
     { subject: "主动性", value: student.fitSignals.initiative }
   ];
-  const risk = getRiskMeta(student.riskLevel);
-  const reasons = getRiskReasons(student);
   const completedTasks = getCompletedTasks(student);
+  const reasons = getRiskReasons(student);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
+      <SheetContent className="max-w-2xl sm:max-w-[720px]">
         <SheetHeader>
-          <SheetTitle>{student.name} · 成长详情</SheetTitle>
+          <SheetTitle>{student.name} · 适岗证据链</SheetTitle>
           <SheetDescription>
             {student.role}实习生，导师 {student.mentor}，当前阶段 {student.stage}
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-5">
-          <div className="grid grid-cols-3 gap-3">
-            <MiniStat label="任务进度" value={`${student.progress}%`} />
-            <MiniStat label="反馈次数" value={`${student.feedbackCount}`} />
-            <MiniStat label="适岗信号" value={`${getFitAverage(student)}`} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <DarkDetailStat label="进度" value={`${student.progress}%`} />
+            <DarkDetailStat label="能量" value={`${student.energy}`} />
+            <DarkDetailStat label="反馈" value={`${student.feedbackCount} 次`} />
+            <DarkDetailStat label="适岗" value={`${getFitAverage(student)}`} />
           </div>
-          <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-7 text-amber-50">
-            AI 风险判断只作为沟通线索，不直接作为录用或淘汰依据；最终判断必须结合导师访谈、业务反馈和 HRBP 的人情分寸。
+          <div className="rounded-xl border border-amber-300/30 bg-amber-400/12 p-4 text-sm font-medium leading-7 text-amber-50">
+            AI 风险判断仅作为 HRBP 与导师沟通线索，不直接作为留用、淘汰或评价依据。
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.055] p-4">
-            <h3 className="mb-3 font-semibold">成长轨迹</h3>
-            <div className="space-y-3">
-              {growthStages.map((stage) => (
-                <div key={stage} className="flex items-center gap-3">
-                  <div className={cn("h-3 w-3 rounded-full", stage === student.stage ? "bg-cyan-300" : "bg-white/20")} />
-                  <span className={cn("text-sm", stage === student.stage ? "text-cyan-100" : "text-slate-400")}>{stage}</span>
-                </div>
-              ))}
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
+            <h3 className="mb-3 font-semibold text-white">成长轨迹</h3>
+            <GrowthPathDark currentStage={student.stage} history={student.taskHistory} />
+          </div>
+          <div className="rounded-2xl border border-cyan-300/30 bg-cyan-400/10 p-4 shadow-glow">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-white">适岗证据链</h3>
+              <Badge variant="dark">正直：不凭感觉贴标签</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <EvidencePanel
+                title="任务证据"
+                items={completedTasks.map((task) => `${task.title}：${task.evidence}`)}
+              />
+              <EvidencePanel
+                title="导师证据"
+                items={student.feedbackHistory.slice(0, 3).map((item) => `${item.createdAt}：${item.praise}`)}
+              />
+              <EvidencePanel
+                title="行为信号"
+                items={(reasons.length ? reasons : ["反馈及时", "任务稳定"]).map((item) => `# ${item}`)}
+              />
+              <EvidencePanel title="AI 建议" items={[student.nextAction]} />
             </div>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.055] p-4">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="font-semibold">AI 风险判断</h3>
-              <Badge variant={risk.variant}>{risk.label}</Badge>
-            </div>
-            <p className="text-sm leading-7 text-slate-300">
-              当前风险原因：{reasons.length ? reasons.join("、") : "暂无明显风险"}。风险来自任务进度、反馈次数、目标清晰度和融入信号的综合判断。
-            </p>
-          </div>
-          <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-4">
-            <h3 className="mb-3 font-semibold">适岗证据链</h3>
-            <EvidenceList
-              sections={[
-                {
-                  title: "已完成任务",
-                  items: completedTasks.map((task) => `${task.title}：${task.evidence}`)
-                },
-                {
-                  title: "导师反馈",
-                  items: student.feedbackHistory.slice(0, 2).map((item) => `${item.createdAt}：${item.praise}`)
-                },
-                {
-                  title: "行为信号",
-                  items: student.tags.map((tag) => `# ${tag}`)
-                },
-                {
-                  title: "AI 建议",
-                  items: [student.nextAction]
-                }
-              ]}
-            />
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.055] p-4">
-            <h3 className="mb-3 font-semibold">适岗雷达图</h3>
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
+            <h3 className="mb-3 font-semibold text-white">适岗雷达图</h3>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
@@ -1271,304 +1393,277 @@ function StudentDetailSheet({
   );
 }
 
-function AiCapabilitySection() {
-  const capabilities = [
-    {
-      title: "AI 成长陪跑",
-      desc: "根据阶段、岗位任务和风险状态生成下一步建议，让新人知道现在最该问清什么、交付什么。",
-      icon: Sparkles
-    },
-    {
-      title: "AI 反馈整理",
-      desc: "把导师的自然语言观察拆成肯定、建议和下周行动，并写回学生详情。",
-      icon: MessageSquareText
-    },
-    {
-      title: "AI 风险识别",
-      desc: "根据任务进度、反馈次数、目标不清和融入信号动态识别风险原因。",
-      icon: Search
-    },
-    {
-      title: "AI 周报生成",
-      desc: "自动生成 HRBP 周报和优先动作，让 HR 把时间用在判断、沟通和机制设计上。",
-      icon: FileText
-    }
-  ];
-
-  return (
-    <section id="ai-design" className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="AI 能力设计"
-          tag="技术应用型 HR"
-          title="AI 做整理、提醒、归纳，人做判断、沟通、决策"
-          description="鹅苗星图刻意保留人的位置。AI 不替代导师和 HR，而是把重复整理、提醒、归纳和初步判断交给系统。"
-        />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {capabilities.map((item) => (
-            <Card key={item.title} className="min-h-[220px]">
-              <CardHeader>
-                <item.icon className="h-7 w-7 text-cyan-100" />
-                <CardTitle>{item.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-slate-300">{item.desc}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CourseMappingSection() {
-  const courseCards = [
-    {
-      title: "沟通型 HR",
-      desc: "角色入口连接实习生、导师、HR，减少信息断点，让业务需求和员工感受都被看见。",
-      icon: Handshake
-    },
-    {
-      title: "分析型 HR",
-      desc: "总览看板沉淀任务完成率、反馈频次、风险标签和适岗信号，辅助 HR 做更清楚的判断。",
-      icon: BarChart3
-    },
-    {
-      title: "创意型 HR",
-      desc: "星图视觉和成长能量把实习带教做成可感知体验，让企业文化不是口号。",
-      icon: Lightbulb
-    },
-    {
-      title: "技术应用型 HR",
-      desc: "AI 反馈、周报和状态联动把原本靠人工追问的流程，变成可复用的智能工具。",
-      icon: Layers
-    }
-  ];
-
-  return (
-    <section className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="课程内容映射"
-          title="把训练营里的四类 HR 能力落到一个产品里"
-          description="这个 Demo 的重点不是炫技，而是把课程里的沟通、分析、创意和技术应用串成一个能解释业务问题的作品。"
-        />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {courseCards.map((card) => (
-            <Card key={card.title} className="bg-white/[0.07]">
-              <CardHeader>
-                <card.icon className="h-7 w-7 text-cyan-100" />
-                <CardTitle>{card.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-slate-300">{card.desc}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CultureSection() {
-  const culture = [
-    ["用户为本", "三类用户都有工作台，实习生、导师、HR 的任务都被产品照顾。"],
-    ["科技向善", "AI 辅助支持，不替代人的判断，让关怀更及时、更公平。"],
-    ["协作", "多角色在同一张看板同步信息，减少来回追问和口径偏差。"],
-    ["进取", "阶段任务推动新人持续成长，让努力方向更清楚。"],
-    ["创造", "用产品化方式重塑实习带教流程，把文化变成可感知体验。"],
-    ["正直", "风险判断有证据，不凭感觉给人贴标签。"]
-  ];
-
-  return (
-    <section className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="腾讯文化映射"
-          title="文化不是写在墙上，而是嵌进功能里"
-          description="页面不使用任何腾讯 Logo，只把文化关键词转化为看板里的设计原则和交互选择。"
-        />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {culture.map(([title, desc]) => (
-            <Card key={title}>
-              <CardHeader className="pb-3">
-                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/15">
-                  <ShieldCheck className="h-5 w-5 text-cyan-100" />
-                </div>
-                <CardTitle>{title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-slate-300">{desc}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ImpactSection() {
-  const data = [
-    { name: "上线前", value: 34 },
-    { name: "第 2 周", value: 48 },
-    { name: "第 4 周", value: 67 },
-    { name: "第 8 周", value: 82 }
-  ];
-  const metrics = [
-    { title: "HR 重复咨询减少", value: "42%", icon: MessageSquareText },
-    { title: "导师反馈及时率提升", value: "+28%", icon: TrendingUp },
-    { title: "实习生目标清晰度提升", value: "+36%", icon: Target },
-    { title: "适岗判断信息完整度提升", value: "86%", icon: Eye }
-  ];
-
-  return (
-    <section id="impact" className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="效果评估"
-          title="用过程指标证明它真的能落地"
-          description="评估不只看最终留用结果，也看过程中支持是否更及时、判断证据是否更完整、每个角色是否少做重复追问。"
-        />
-        <div className="grid gap-4 md:grid-cols-4">
-          {metrics.map((metric) => (
-            <Card key={metric.title}>
-              <CardHeader className="pb-2">
-                <metric.icon className="h-6 w-6 text-cyan-100" />
-                <CardDescription>{metric.title}</CardDescription>
-                <CardTitle className="text-3xl">{metric.value}</CardTitle>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>目标清晰度趋势</CardTitle>
-            <CardDescription>模拟问卷得分：从“我知道下一步该做什么”追踪新人体验</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
-                <defs>
-                  <linearGradient id="impactGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#00C2FF" stopOpacity={0.45} />
-                    <stop offset="100%" stopColor="#00C2FF" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#CBD5E1", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#CBD5E1", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <ChartTooltip contentStyle={tooltipStyle} />
-                <Area type="monotone" dataKey="value" stroke="#00C2FF" fill="url(#impactGradient)" strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-    </section>
-  );
-}
-
-function ClosingCta({
-  exported,
+function WeeklyReportPage({
+  report,
+  loading,
+  loadingStep,
+  onGenerate,
+  onCopy,
   onExport
 }: {
-  exported: boolean;
+  report: WeeklyReport | null;
+  loading: boolean;
+  loadingStep: number;
+  onGenerate: () => void;
+  onCopy: () => void;
   onExport: () => void;
 }) {
   return (
-    <section className="px-4 pb-20 pt-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-blue-500/[0.18] via-cyan-500/10 to-emerald-500/10 p-8 text-center shadow-glow backdrop-blur-xl sm:p-12">
-        <Badge variant="blue" className="mb-5">结尾 CTA</Badge>
-        <h2 className="text-balance text-3xl font-semibold tracking-normal text-white sm:text-5xl">
-          让实习成长不再散落在私聊里
-        </h2>
-        <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-slate-200">
-          鹅苗星图不是为了“管住新人”，而是让每一次任务、反馈、困惑和成长信号被及时看见。
-        </p>
-        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Button size="lg" onClick={() => scrollToSection("demo")}>
-            查看 Demo 工作台
-            <Rocket className="ml-2 h-5 w-5" />
-          </Button>
-          <Button size="lg" variant="secondary" onClick={onExport}>
-            导出 AI 周报
-            <Download className="ml-2 h-5 w-5" />
-          </Button>
-        </div>
-        {exported && (
-          <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-5 text-sm text-emerald-100"
-          >
-            已跳转到根据当前学生状态实时生成的 AI 周报，可直接作为作业说明素材。
-          </motion.p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function HrPriorityCard({ students, compact = false }: { students: GrowthStudent[]; compact?: boolean }) {
-  const actions = getPriorityActions(students);
-  return (
-    <Card className={cn("border-cyan-300/20", compact && "h-full")}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="AI 周报"
+        title="可生成、可复制、可导出的 HRBP 行动周报"
+        description="周报来自当前任务、反馈和风险状态，不是写死文案。演示时可以先勾选任务、生成反馈，再重新生成周报。"
+        badges={["分析型 HR｜从数据看问题", "技术应用型 HR｜AI 周报生成"]}
+      />
+      <Card>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle className="text-base">本周 HRBP 优先动作</CardTitle>
-            <CardDescription>来自当前风险、反馈和适岗信号</CardDescription>
+            <CardTitle>本周成长周报</CardTitle>
+            <CardDescription>{report ? `生成时间：${report.generatedAt}` : "点击按钮后调用 POST /api/weekly-report"}</CardDescription>
           </div>
-          <Badge variant="blue">分析型 HR</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-2">
-        {actions.map((action) => (
-          <div key={action} className="flex items-start gap-2 rounded-lg bg-white/[0.06] p-3 text-sm leading-6 text-slate-200">
-            <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-cyan-100" />
-            {action}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={onGenerate} disabled={loading} className="cursor-pointer">
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4" />}
+              {report ? "重新生成" : "生成本周周报"}
+            </Button>
+            <Button variant="secondary" onClick={onCopy} disabled={!report || loading} className="cursor-pointer">
+              <Copy className="mr-2 h-4 w-4" />
+              复制周报
+            </Button>
+            <Button variant="outline" onClick={onExport} disabled={!report || loading} className="cursor-pointer">
+              <Download className="mr-2 h-4 w-4" />
+              导出 Markdown
+            </Button>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="grid gap-3 md:grid-cols-4">
+              {loadingSteps.map((step, index) => (
+                <div
+                  key={step}
+                  className={cn(
+                    "rounded-xl border p-4 text-sm font-medium",
+                    index <= loadingStep ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-500"
+                  )}
+                >
+                  <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm">
+                    {index < loadingStep ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+                  </div>
+                  {step}
+                </div>
+              ))}
+            </div>
+          ) : report ? (
+            <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+              <div className="space-y-4">
+                <ReportSection title="本周概览" items={[report.overview]} />
+                <ReportSection title="风险学生" items={report.riskStudents.length ? report.riskStudents : ["暂无高风险集中信号。"]} />
+                <ReportSection title="高适岗学生" items={report.highFitStudents.length ? report.highFitStudents : ["暂无新增高适岗信号。"]} />
+              </div>
+              <div className="space-y-4">
+                <ReportSection title="导师待办" items={report.mentorTodos} />
+                <ReportSection title="HRBP 优先动作" items={report.hrbpActions} />
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-800">
+                  <p className="mb-2 font-semibold">AI 边界说明</p>
+                  {report.boundary}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid min-h-[280px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-center">
+              <div>
+                <FileText className="mx-auto h-10 w-10 text-blue-600" />
+                <p className="mt-3 text-lg font-semibold text-slate-900">还没有生成周报</p>
+                <p className="mt-2 text-sm text-slate-500">建议先体验任务勾选和导师反馈，再生成一版更有数据变化的周报。</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-function CultureRibbon({ items }: { items: string[] }) {
+function EventsPage({ events }: { events: DemoEvent[] }) {
   return (
-    <div className="flex h-full flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] p-4">
-      {items.map((item) => (
-        <Badge key={item} variant="default">{item}</Badge>
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="数据日志"
+        title="模拟后端正在记录每一次关键动作"
+        description="评委点击任务、生成反馈、生成周报后，都能在这里看到数据变化记录。"
+        badges={["技术应用型 HR｜模拟后端 API", "协作：多角色共享同一张成长地图"]}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>最近操作记录</CardTitle>
+          <CardDescription>GET /api/events 返回最近事件</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {events.map((event) => (
+            <div key={event.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  <Activity className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-6 text-slate-800">{event.message}</p>
+                  <p className="mt-1 text-xs text-slate-400">{event.type}</p>
+                </div>
+              </div>
+              <span className="text-xs text-slate-400">{event.createdAt}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SolutionPage() {
+  const apiItems = [
+    "GET /api/students：读取 20 名实习生和看板指标",
+    "PATCH /api/students/[id]/tasks：更新任务并重算进度、能量、风险、阶段",
+    "POST /api/feedback：生成结构化反馈并写入学生档案",
+    "POST /api/weekly-report：基于当前数据生成 AI 周报",
+    "GET /api/events：读取最近操作日志",
+    "POST /api/reset：重置演示数据，方便录视频"
+  ];
+  const highlights = [
+    "三角色工作台：实习生、导师、HRBP 都有明确任务和入口。",
+    "数据闭环：任务 → 反馈 → 风险 → KPI → 周报全部联动。",
+    "适岗证据链：任务证据、导师证据、行为信号、AI 建议在详情抽屉里集中呈现。",
+    "AI 边界：明确说明 AI 只提供沟通线索，不直接用于留用或淘汰。"
+  ];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="方案说明"
+        title="作业四：实习能量站，而不是作业三 30-60-90"
+        description="本 Demo 保留阶段化成长思想，但主线是业务部新人成长导航智能看板，核心解决多角色协同和适岗证据沉淀。"
+        badges={["用户为本", "科技向善", "正直", "进取", "协作", "创造"]}
+      />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>项目亮点</CardTitle>
+            <CardDescription>适合写入作业提交说明</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {highlights.map((item) => (
+              <div key={item} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-500" />
+                {item}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>模拟后端 API</CardTitle>
+            <CardDescription>Demo 阶段使用内存 store，真实落地可接 HRIS / 招聘系统 / 员工系统</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {apiItems.map((item) => (
+              <div key={item} className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm font-medium leading-7 text-blue-800">
+                {item}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>课程与腾讯文化嵌入方式</CardTitle>
+          <CardDescription>不堆口号，而是把能力放到功能旁边</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <CultureCourseCard title="沟通型 HR" desc="三角色协同连接业务、导师与新人，减少信息断点。" icon={<Handshake className="h-5 w-5" />} />
+          <CultureCourseCard title="分析型 HR" desc="KPI、风险、周报让 HRBP 从数据看问题。" icon={<BarChart3 className="h-5 w-5" />} />
+          <CultureCourseCard title="创意型 HR" desc="鹅苗星图和成长能量让成长体验变得可感知。" icon={<Sparkles className="h-5 w-5" />} />
+          <CultureCourseCard title="技术应用型 HR" desc="API、AI 反馈、AI 周报和状态联动改变工作方式。" icon={<BrainCircuit className="h-5 w-5" />} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PageHeader({
+  eyebrow,
+  title,
+  description,
+  badges
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  badges: string[];
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Badge variant="blue">{eyebrow}</Badge>
+        {badges.map((badge) => (
+          <Badge key={badge} variant={badge.includes("风险") || badge.includes("正直") ? "yellow" : "default"}>
+            {badge}
+          </Badge>
+        ))}
+      </div>
+      <h2 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">{title}</h2>
+      <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function FilterGroup({
+  label,
+  options,
+  value,
+  onChange
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+      <span className="shrink-0 px-2 text-xs font-medium text-slate-500">{label}</span>
+      {options.map((option) => (
+        <button
+          key={option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium transition",
+            value === option ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:bg-white/80 hover:text-slate-950"
+          )}
+        >
+          {option}
+        </button>
       ))}
     </div>
   );
 }
 
-function MiniStat({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: string;
-  tone?: GrowthStudent["riskLevel"];
-}) {
+function MetricLine({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.07] p-4">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p
-        className={cn(
-          "mt-1 truncate text-2xl font-semibold text-white",
-          tone === "high" && "text-red-100",
-          tone === "medium" && "text-amber-100",
-          tone === "low" && "text-emerald-100"
-        )}
-      >
-        {value}
-      </p>
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+        <span>{label}</span>
+        <span>{value}%</span>
+      </div>
+      <Progress value={value} />
+    </div>
+  );
+}
+
+function SmallMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -1586,80 +1681,89 @@ function FeedbackBlock({
     <div
       className={cn(
         "rounded-xl border p-4 text-sm leading-7",
-        tone === "green" && "border-emerald-300/25 bg-emerald-400/10 text-emerald-50",
-        tone === "blue" && "border-cyan-300/25 bg-cyan-400/10 text-cyan-50",
-        tone === "yellow" && "border-amber-300/25 bg-amber-400/10 text-amber-50"
+        tone === "green" && "border-emerald-200 bg-emerald-50 text-emerald-800",
+        tone === "blue" && "border-blue-200 bg-blue-50 text-blue-800",
+        tone === "yellow" && "border-amber-200 bg-amber-50 text-amber-800"
       )}
     >
-      <p className="mb-1 font-semibold text-white">{title}</p>
+      <p className="mb-1 font-semibold text-slate-950">{title}</p>
       {content}
     </div>
   );
 }
 
-function FilterGroup({
-  icon,
-  options,
-  value,
-  onChange
-}: {
-  icon: ReactNode;
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function ReportSection({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] p-2">
-      <span className="hidden text-slate-300 sm:inline-flex">{icon}</span>
-      {options.map((option) => (
-        <button
-          key={option}
-          onClick={() => onChange(option)}
-          className={cn(
-            "rounded-lg px-3 py-1.5 text-sm transition",
-            value === option
-              ? "bg-cyan-300/[0.18] text-cyan-50"
-              : "text-slate-300 hover:bg-white/10 hover:text-white"
-          )}
-        >
-          {option}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function MetricLine({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        <span>{value}%</span>
-      </div>
-      <Progress value={value} />
-    </div>
-  );
-}
-
-function EvidenceList({
-  sections
-}: {
-  sections: { title: string; items: string[] }[];
-}) {
-  return (
-    <div className="grid gap-4">
-      {sections.map((section) => (
-        <div key={section.title}>
-          <p className="mb-2 text-sm font-semibold text-white">{section.title}</p>
-          <div className="space-y-2">
-            {(section.items.length ? section.items : ["暂无可用证据"]).map((item) => (
-              <div key={item} className="rounded-lg bg-white/[0.08] p-3 text-sm leading-6 text-slate-200">
-                {item}
-              </div>
-            ))}
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="mb-3 font-semibold text-slate-950">{title}</p>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item} className="rounded-lg bg-slate-50 p-3 text-sm leading-7 text-slate-700">
+            {item}
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DarkDetailStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.07] p-4">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-2xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function GrowthPathDark({ currentStage, history }: { currentStage: GrowthStage; history: string[] }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-5">
+        {growthStages.map((stage) => (
+          <div
+            key={stage}
+            className={cn(
+              "rounded-xl border p-3 text-sm",
+              stage === currentStage ? "border-cyan-300/40 bg-cyan-300/12 text-cyan-50" : "border-white/10 bg-white/[0.04] text-slate-300"
+            )}
+          >
+            {stage}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {(history.length ? history.slice(0, 4) : ["暂无任务完成记录"]).map((item) => (
+          <div key={item} className="rounded-lg bg-white/[0.06] p-3 text-sm leading-6 text-slate-300">
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EvidencePanel({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#07111F]/55 p-4">
+      <p className="mb-3 text-sm font-semibold text-cyan-50">{title}</p>
+      <div className="space-y-2">
+        {(items.length ? items : ["暂无可用证据"]).map((item) => (
+          <div key={item} className="rounded-lg bg-white/[0.08] p-3 text-sm leading-6 text-slate-200">
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CultureCourseCard({ title, desc, icon }: { title: string; desc: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">{icon}</div>
+      <p className="font-semibold text-slate-950">{title}</p>
+      <p className="mt-2 text-sm leading-7 text-slate-600">{desc}</p>
     </div>
   );
 }

@@ -18,6 +18,7 @@ export type MentorFeedback = {
 export type GrowthStudent = Student & {
   feedbackCount: number;
   completedTaskIds: string[];
+  taskHistory: string[];
   feedbackHistory: MentorFeedback[];
 };
 
@@ -26,19 +27,19 @@ export const roleTasks: Record<InternshipRole, TaskDefinition[]> = {
     { id: "product-context", title: "完成业务背景学习", evidence: "已梳理业务目标、用户角色和核心指标" },
     { id: "product-review", title: "参与一次需求评审", evidence: "参与需求评审并记录 3 个关键问题" },
     { id: "product-competitor", title: "输出一份竞品观察", evidence: "提交竞品观察，沉淀可借鉴点和风险点" },
-    { id: "product-problem", title: "完成用户问题拆解", evidence: "用背景-问题-方案-风险框架拆解用户问题" }
+    { id: "product-1v1", title: "和导师进行一次 1v1", evidence: "完成导师 1v1，明确下周一个验证动作" }
   ],
   研发: [
-    { id: "dev-env", title: "完成环境配置", evidence: "开发环境可运行，完成首次本地调试" },
-    { id: "dev-code-reading", title: "阅读核心模块代码", evidence: "画出模块调用链并标记关键依赖" },
+    { id: "dev-env", title: "完成开发环境配置", evidence: "开发环境可运行，完成首次本地调试" },
+    { id: "dev-code-reading", title: "阅读一个核心模块代码", evidence: "画出模块调用链并标记关键依赖" },
     { id: "dev-issue", title: "修复一个低风险 issue", evidence: "提交 issue 修复并通过自测" },
-    { id: "dev-review", title: "参与一次代码 Review", evidence: "完成一次 Review 反馈吸收和复盘" }
+    { id: "dev-review", title: "参加一次代码 Review", evidence: "完成一次 Review 反馈吸收和复盘" }
   ],
   销售: [
-    { id: "sales-profile", title: "完成客户画像学习", evidence: "梳理目标客户分层和常见需求" },
-    { id: "sales-shadowing", title: "完成客户沟通旁听", evidence: "旁听客户沟通并记录关键异议" },
-    { id: "sales-tags", title: "沉淀 5 条反馈标签", evidence: "把客户反馈整理成可复用标签" },
-    { id: "sales-review", title: "完成一次拜访复盘", evidence: "输出拜访复盘和下一步跟进动作" }
+    { id: "sales-profile", title: "学习客户画像和产品卖点", evidence: "梳理目标客户分层、产品卖点和常见需求" },
+    { id: "sales-shadowing", title: "旁听一次客户沟通", evidence: "旁听客户沟通并记录关键异议" },
+    { id: "sales-tags", title: "输出 3 条客户反馈标签", evidence: "把客户反馈整理成可复用标签" },
+    { id: "sales-review", title: "进行一次模拟客户拜访复盘", evidence: "输出拜访复盘和下一步跟进动作" }
   ]
 };
 
@@ -118,6 +119,9 @@ export function hydrateStudents(): GrowthStudent[] {
       ...student,
       feedbackCount,
       completedTaskIds: tasks.slice(0, completedCount).map((task) => task.id),
+      taskHistory: tasks
+        .slice(0, completedCount)
+        .map((task, taskIndex) => `第 ${Math.max(1, taskIndex + 1)} 周完成「${task.title}」`),
       feedbackHistory: [
         {
           praise: student.lastFeedback,
