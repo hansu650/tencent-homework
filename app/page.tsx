@@ -1,5 +1,5 @@
-import { EmiaoGrowthMap } from "@/components/emiao-growth-map";
+import { OpeningPage } from "@/components/story-mode";
 
 export default function Home() {
-  return <EmiaoGrowthMap />;
+  return <OpeningPage />;
 }

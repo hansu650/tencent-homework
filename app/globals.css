@@ -107,3 +107,73 @@ select {
   animation: shimmer 2.4s linear infinite;
   pointer-events: none;
 }
+
+.rain-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rain-field::before,
+.rain-field::after {
+  content: "";
+  position: absolute;
+  inset: -40% 0 0;
+  background-image:
+    linear-gradient(180deg, rgba(125, 211, 252, 0), rgba(125, 211, 252, 0.45)),
+    linear-gradient(180deg, rgba(96, 165, 250, 0), rgba(96, 165, 250, 0.28));
+  background-size:
+    2px 110px,
+    1px 76px;
+  background-position:
+    18px 0,
+    54px 32px;
+  animation: rainFall 1.2s linear infinite;
+  opacity: 0.55;
+  transform: skewX(-12deg);
+}
+
+.rain-field::after {
+  animation-duration: 0.82s;
+  opacity: 0.32;
+  transform: skewX(-16deg) translateX(80px);
+}
+
+.data-rain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(180deg, transparent, rgba(0, 194, 255, 0.18), transparent),
+    linear-gradient(180deg, transparent, rgba(22, 100, 255, 0.16), transparent);
+  background-size:
+    1px 220px,
+    1px 180px;
+  background-position:
+    12% 0,
+    72% 40px;
+  animation: dataRain 6s linear infinite;
+}
+
+@keyframes rainFall {
+  from {
+    transform: translateY(-12%) skewX(-12deg);
+  }
+  to {
+    transform: translateY(34%) skewX(-12deg);
+  }
+}
+
+@keyframes dataRain {
+  from {
+    background-position:
+      12% -220px,
+      72% -180px;
+  }
+  to {
+    background-position:
+      12% 220px,
+      72% 180px;
+  }
+}
