@@ -15,7 +15,7 @@ import { average } from "@/lib/utils";
 
 export type DemoEvent = {
   id: string;
-  type: "task" | "feedback" | "weekly-report" | "system" | "reset";
+  type: "task" | "feedback" | "feedback-request" | "weekly-report" | "system" | "reset";
   message: string;
   createdAt: string;
 };
@@ -298,6 +298,32 @@ export function createFeedback(studentId: string, mentorNote: string) {
 
   return {
     feedback: clone(feedback),
+    student: clone(nextStudent),
+    students: getStudents(),
+    events: getEvents()
+  };
+}
+
+export function requestMentorFeedback(studentId: string, taskId: string) {
+  const store = getStore();
+  const student = store.students.find((item) => item.id === studentId);
+  if (!student) return null;
+
+  const task = roleTasks[student.role].find((item) => item.id === taskId);
+  if (!task) return null;
+
+  const tags = Array.from(new Set([...student.tags, "请求反馈"])).slice(0, 7);
+  const nextStudent = normalizeStudent({
+    ...student,
+    tags,
+    nextAction: `请导师围绕「${task.title}」补充一次结构化反馈，重点看事实、判断和下周行动。`,
+    taskHistory: [`${nowLabel()} 请求导师反馈「${task.title}」`, ...student.taskHistory].slice(0, 8)
+  });
+
+  store.students = store.students.map((item) => (item.id === studentId ? nextStudent : item));
+  addEvent("feedback-request", `${student.name}请求导师围绕「${task.title}」补充反馈，已进入导师待办。`);
+
+  return {
     student: clone(nextStudent),
     students: getStudents(),
     events: getEvents()

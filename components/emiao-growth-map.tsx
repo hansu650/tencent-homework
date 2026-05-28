@@ -7,7 +7,6 @@ import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
-  BookOpenCheck,
   BrainCircuit,
   CheckCircle2,
   ChevronRight,
@@ -27,7 +26,6 @@ import {
   MessageSquareText,
   PanelLeft,
   RefreshCw,
-  Rocket,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -81,7 +79,6 @@ import {
   getRiskMeta,
   getRiskReasons,
   growthStages,
-  roleTasks,
   type GrowthStudent,
   type MentorFeedback
 } from "@/lib/growth";
@@ -185,6 +182,7 @@ export function EmiaoGrowthMap() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportStep, setReportStep] = useState(0);
   const [taskLoadingId, setTaskLoadingId] = useState<string | null>(null);
+  const [feedbackRequestLoadingId, setFeedbackRequestLoadingId] = useState<string | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -244,6 +242,27 @@ export function EmiaoGrowthMap() {
       showToast("任务更新失败，请稍后重试");
     } finally {
       setTaskLoadingId(null);
+    }
+  };
+
+  const handleFeedbackRequest = async (student: GrowthStudent, taskId: string) => {
+    setFeedbackRequestLoadingId(taskId);
+
+    try {
+      const response = await fetch("/api/feedback/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: student.id, taskId })
+      });
+      const result = (await response.json()) as { students: GrowthStudent[]; events: DemoEvent[] };
+      if (!response.ok) throw new Error("request failed");
+      setStudents(result.students);
+      setEvents(result.events);
+      showToast("已向导师发起反馈请求");
+    } catch {
+      showToast("反馈请求失败，请稍后重试");
+    } finally {
+      setFeedbackRequestLoadingId(null);
     }
   };
 
@@ -391,7 +410,9 @@ export function EmiaoGrowthMap() {
                       selectedStudentId={selectedStudentId}
                       onSelectStudent={setSelectedStudentId}
                       onToggleTask={handleTaskToggle}
+                      onRequestFeedback={handleFeedbackRequest}
                       taskLoadingId={taskLoadingId}
+                      feedbackRequestLoadingId={feedbackRequestLoadingId}
                     />
                   )}
                   {activeView === "mentor" && mentorTarget && (
@@ -900,23 +921,277 @@ function MiniBarList({ title, data }: { title: string; data: { name: string; val
   );
 }
 
+type TaskStatus = "待开始" | "进行中" | "待导师反馈" | "已完成";
+
+type DetailedTask = {
+  id: string;
+  title: string;
+  ability: string;
+  goal: string;
+  deliverable: string;
+  mentorStandard: string;
+  hrSignal: string;
+  template: string[];
+  rubric: string[];
+};
+
+const roleTaskDetails: Record<InternshipRole, DetailedTask[]> = {
+  产品: [
+    {
+      id: "product-context",
+      title: "完成业务背景学习",
+      ability: "业务理解",
+      goal: "先理解业务目标、用户角色和核心指标，不急着输出方案。",
+      deliverable: "业务背景笔记 + 3 个关键问题。",
+      mentorStandard: "能否讲清楚用户是谁、业务目标是什么、当前卡点是什么。",
+      hrSignal: "业务理解、主动提问、学习速度。",
+      template: ["业务目标：这件事服务什么指标", "用户角色：谁在什么场景下遇到问题", "关键问题：我还需要向导师确认什么"],
+      rubric: ["能区分用户、场景和指标", "能提出不止一个关键问题", "能把疑问转成下一步行动"]
+    },
+    {
+      id: "product-review",
+      title: "参与一次需求评审",
+      ability: "协作沟通",
+      goal: "在真实会议中观察业务如何讨论问题和取舍。",
+      deliverable: "评审纪要 + 3 条风险点。",
+      mentorStandard: "是否能区分事实、判断和建议。",
+      hrSignal: "协作沟通、结构化表达、业务敏感度。",
+      template: ["事实：会上确认了什么", "判断：我如何理解优先级", "风险：哪些地方还需要验证"],
+      rubric: ["纪要完整且不混淆观点", "风险点能对应业务影响", "会后能主动同步问题"]
+    },
+    {
+      id: "product-competitor",
+      title: "输出一份竞品观察",
+      ability: "主动性",
+      goal: "从外部产品中学习解决类似问题的方式。",
+      deliverable: "1 页竞品观察卡。",
+      mentorStandard: "是否能把竞品功能和本业务场景联系起来。",
+      hrSignal: "分析能力、用户视角、主动性。",
+      template: ["竞品做法：它如何解决问题", "可借鉴点：和本业务有什么关系", "不适用点：为什么不能直接照搬"],
+      rubric: ["不只罗列功能截图", "能说清用户价值", "能提出本业务可验证假设"]
+    },
+    {
+      id: "product-1v1",
+      title: "和导师进行一次 1v1",
+      ability: "反馈吸收",
+      goal: "对齐当前成长卡点和下周验证动作。",
+      deliverable: "1v1 纪要 + 下周行动清单。",
+      mentorStandard: "是否能主动复盘问题并提出下一步动作。",
+      hrSignal: "自我驱动、反馈吸收、成长意愿。",
+      template: ["本周完成：哪些任务有证据", "当前卡点：我需要导师支持什么", "下周行动：一个可验证的小交付"],
+      rubric: ["能主动复盘问题", "能接受具体反馈", "能把反馈转成行动"]
+    }
+  ],
+  研发: [
+    {
+      id: "dev-env",
+      title: "完成开发环境配置",
+      ability: "执行质量",
+      goal: "先跑通本地开发链路，降低后续任务的不确定性。",
+      deliverable: "环境配置截图 + 问题记录。",
+      mentorStandard: "能否独立定位基础问题。",
+      hrSignal: "执行质量、问题记录习惯。",
+      template: ["环境截图：能运行核心服务", "问题记录：遇到什么报错", "定位过程：查了哪些资料"],
+      rubric: ["能复现并描述问题", "能记录定位路径", "能主动同步阻塞点"]
+    },
+    {
+      id: "dev-code-reading",
+      title: "阅读一个核心模块代码",
+      ability: "学习速度",
+      goal: "理解模块输入、处理和输出，避免只看局部代码。",
+      deliverable: "模块流程图 + 关键接口说明。",
+      mentorStandard: "能否讲清模块输入、处理和输出。",
+      hrSignal: "学习速度、技术理解。",
+      template: ["输入：模块接收什么数据", "处理：核心逻辑在哪", "输出：对下游产生什么影响"],
+      rubric: ["能画出基本调用链", "能说出关键依赖", "能发现一个可追问点"]
+    },
+    {
+      id: "dev-issue",
+      title: "修复一个低风险 issue",
+      ability: "执行质量",
+      goal: "通过小范围修复验证端到端交付意识。",
+      deliverable: "PR 链接 / 修改说明。",
+      mentorStandard: "代码是否清晰、是否考虑边界。",
+      hrSignal: "执行质量、责任心。",
+      template: ["问题原因：为什么会出现", "修改说明：改了哪里", "自测清单：覆盖哪些边界"],
+      rubric: ["改动范围清晰", "自测证据完整", "能说明潜在影响"]
+    },
+    {
+      id: "dev-review",
+      title: "参加一次代码 Review",
+      ability: "协作沟通",
+      goal: "在 Review 中学习团队标准和反馈吸收方式。",
+      deliverable: "Review 记录 + 2 条改进点。",
+      mentorStandard: "是否能理解 Review 反馈并调整。",
+      hrSignal: "协作沟通、反馈吸收。",
+      template: ["收到的反馈：具体是什么", "我的理解：为什么要这样改", "改进点：下次如何避免"],
+      rubric: ["能复述反馈原因", "能及时修改", "能沉淀团队规范"]
+    }
+  ],
+  销售: [
+    {
+      id: "sales-profile",
+      title: "学习客户画像和产品卖点",
+      ability: "业务理解",
+      goal: "先理解客户痛点和产品价值，再进入真实沟通场景。",
+      deliverable: "客户画像卡 + 产品卖点表。",
+      mentorStandard: "能否说清客户痛点和对应价值。",
+      hrSignal: "业务理解、表达能力。",
+      template: ["客户画像：典型客户是谁", "核心痛点：他们为什么需要产品", "卖点对应：价值如何表达"],
+      rubric: ["能讲清客户分层", "能用客户语言表达价值", "能提出一个追问"]
+    },
+    {
+      id: "sales-shadowing",
+      title: "旁听一次客户沟通",
+      ability: "协作沟通",
+      goal: "在真实沟通里观察客户问题、异议和导师回应方式。",
+      deliverable: "客户问题清单 + 沟通复盘。",
+      mentorStandard: "是否能识别客户真实关注点。",
+      hrSignal: "倾听能力、信息捕捉。",
+      template: ["客户问题：客户原话是什么", "真实关注：背后担心什么", "导师回应：如何推进下一步"],
+      rubric: ["能记录关键信息", "能区分表层问题和真实关注", "能复盘沟通节奏"]
+    },
+    {
+      id: "sales-tags",
+      title: "输出 3 条客户反馈标签",
+      ability: "主动性",
+      goal: "把零散客户反馈沉淀成可复盘的业务标签。",
+      deliverable: "客户反馈标签表。",
+      mentorStandard: "标签是否准确、是否有业务价值。",
+      hrSignal: "分析能力、客户敏感度。",
+      template: ["反馈原文：客户怎么说", "标签归类：属于哪类问题", "业务价值：对产品或销售动作有什么启发"],
+      rubric: ["标签不空泛", "能对应真实案例", "能提出后续跟进行动"]
+    },
+    {
+      id: "sales-review",
+      title: "进行一次模拟客户拜访复盘",
+      ability: "执行质量",
+      goal: "通过低风险模拟验证表达、回应和复盘能力。",
+      deliverable: "拜访脚本 + 复盘记录。",
+      mentorStandard: "表达是否清晰，回应是否有逻辑。",
+      hrSignal: "沟通表达、临场反应。",
+      template: ["拜访目标：这次要确认什么", "关键话术：如何表达价值", "复盘记录：哪里可以改进"],
+      rubric: ["表达结构清楚", "回应能抓住重点", "复盘能形成下一步"]
+    }
+  ]
+};
+
+const stageTaskIndexes: Record<GrowthStage, number[]> = {
+  入营: [0],
+  上手: [0, 1],
+  协同: [1, 2],
+  产出: [2, 3],
+  适岗复盘: [3]
+};
+
+const rhythmMarks: Record<GrowthStage, string> = {
+  入营: "W1",
+  上手: "W2",
+  协同: "W3",
+  产出: "W4",
+  适岗复盘: "复盘"
+};
+
+function getStageTasks(role: InternshipRole, stage: GrowthStage) {
+  const details = roleTaskDetails[role];
+  return stageTaskIndexes[stage].map((index) => details[index]).filter(Boolean);
+}
+
+function getTaskStatus(student: GrowthStudent, taskId: string): TaskStatus {
+  const taskTitle = roleTaskDetails[student.role].find((task) => task.id === taskId)?.title ?? "";
+  if (student.completedTaskIds.includes(taskId)) return "已完成";
+  if (student.taskHistory.some((item) => item.includes(`请求导师反馈「${taskTitle}」`))) return "待导师反馈";
+
+  const taskIndex = roleTaskDetails[student.role].findIndex((task) => task.id === taskId);
+  const previousDone = taskIndex <= 0 || roleTaskDetails[student.role].slice(0, taskIndex).some((task) => student.completedTaskIds.includes(task.id));
+  return previousDone ? "进行中" : "待开始";
+}
+
+function getStatusVariant(status: TaskStatus) {
+  if (status === "已完成") return "green" as const;
+  if (status === "待导师反馈") return "yellow" as const;
+  if (status === "进行中") return "blue" as const;
+  return "default" as const;
+}
+
+function getAiQuickJudgement(student: GrowthStudent) {
+  const reasons = getRiskReasons(student);
+  if (reasons.includes("目标不清")) {
+    return "AI 判断：该同学当前主要卡点是任务拆解不清，建议先完成一个可验证的小交付，再请导师反馈。";
+  }
+  if (reasons.includes("反馈缺失") || student.tags.includes("请求反馈")) {
+    return "AI 判断：当前成长证据偏少，建议主动请求导师围绕本周任务补充一次结构化反馈。";
+  }
+  if (reasons.includes("任务滞后")) {
+    return "AI 判断：当前任务推进偏慢，建议把大任务拆成 2 个可验收动作，先交付一个最小版本。";
+  }
+  if (getFitAverage(student) >= 85 && student.riskLevel === "low") {
+    return "AI 判断：该同学已有较强适岗信号，建议争取一个独立小任务验证判断力和闭环能力。";
+  }
+  return "AI 判断：当前节奏稳定，建议继续把任务交付、导师反馈和复盘记录沉淀成适岗证据。";
+}
+
+function getWeeklyNavigationSummary(student: GrowthStudent) {
+  const roleSummary: Record<InternshipRole, string> = {
+    产品: "本周重点不是多做任务，而是把业务问题问清楚。建议先完成业务背景学习，再参与需求评审，最后用 1v1 和导师确认下周验证动作。",
+    研发: "本周重点是先跑通工程链路，再用一个低风险 issue 验证交付习惯。遇到卡点要及时同步，不要独自拖到最后。",
+    销售: "本周重点是把客户画像和真实反馈听清楚，再用标签和复盘沉淀客户敏感度。"
+  };
+
+  const internAction: Record<InternshipRole, string> = {
+    产品: "先完成业务背景学习",
+    研发: "先跑通开发环境和模块阅读",
+    销售: "先梳理客户画像和卖点"
+  };
+
+  const hrFocus: Record<InternshipRole, string> = {
+    产品: "观察业务理解和反馈吸收情况",
+    研发: "观察执行质量和问题记录习惯",
+    销售: "观察客户敏感度和表达清晰度"
+  };
+
+  return {
+    summary: roleSummary[student.role],
+    intern: internAction[student.role],
+    mentor: "本周完成一次结构化反馈",
+    hrbp: hrFocus[student.role]
+  };
+}
+
 function StudentWorkspace({
   students,
   student,
   selectedStudentId,
   onSelectStudent,
   onToggleTask,
-  taskLoadingId
+  onRequestFeedback,
+  taskLoadingId,
+  feedbackRequestLoadingId
 }: {
   students: GrowthStudent[];
   student: GrowthStudent;
   selectedStudentId: string;
   onSelectStudent: (id: string) => void;
   onToggleTask: (student: GrowthStudent, taskId: string) => void;
+  onRequestFeedback: (student: GrowthStudent, taskId: string) => void;
   taskLoadingId: string | null;
+  feedbackRequestLoadingId: string | null;
 }) {
-  const tasks = roleTasks[student.role];
+  const [activeStage, setActiveStage] = useState<GrowthStage>(student.stage);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [detailTask, setDetailTask] = useState<DetailedTask | null>(null);
+  const [activeSummaryAction, setActiveSummaryAction] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveStage(student.stage);
+    setExpandedTaskId(null);
+    setDetailTask(null);
+  }, [student.id, student.stage]);
+
+  const tasks = getStageTasks(student.role, activeStage);
   const riskReasons = getRiskReasons(student);
+  const navigation = getWeeklyNavigationSummary(student);
+  const activeStageIndex = growthStages.indexOf(activeStage);
 
   return (
     <div className="space-y-4">
@@ -926,13 +1201,9 @@ function StudentWorkspace({
         description="实习生端不做管理压迫，而是把阶段任务、导师反馈和 AI 陪跑建议放在一个清楚的行动面板里。"
         badges={["用户为本：新人也有自己的工作台", "进取：阶段任务推动成长"]}
       />
-      <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
-        <Card>
-          <CardHeader>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="blue">创意型 HR｜成长能量</Badge>
-              <Badge variant={getRiskBadgeVariant(student.riskLevel)}>{getRiskMeta(student.riskLevel).label}</Badge>
-            </div>
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+        <Card className="h-fit">
+          <CardHeader className="pb-3">
             <CardTitle>选择实习生</CardTitle>
             <CardDescription>切换不同岗位，任务会自动变化</CardDescription>
           </CardHeader>
@@ -949,23 +1220,27 @@ function StudentWorkspace({
               ))}
             </select>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-slate-500">当前身份</p>
-                  <p className="mt-1 text-xl font-semibold text-slate-950">{student.role}实习生 / 第 3 周</p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-semibold text-slate-950">{student.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {student.role}实习生 · 导师 {student.mentor}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">第 3 周 · {student.stage}</p>
                 </div>
-                <div className="rounded-xl bg-white px-4 py-3 text-right shadow-sm">
-                  <p className="text-xs text-slate-500">成长能量值</p>
-                  <p className="text-3xl font-semibold text-blue-600">{student.energy}</p>
-                </div>
+                <Badge variant={getRiskBadgeVariant(student.riskLevel)}>{getRiskMeta(student.riskLevel).label}</Badge>
               </div>
-              <div className="mt-5 space-y-3">
-                <MetricLine label="任务进度" value={student.progress} />
-                <MetricLine label="适岗均分" value={getFitAverage(student)} />
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <CompactKpi label="成长能量" value={student.energy} suffix="" />
+                <CompactKpi label="任务进度" value={student.progress} suffix="%" />
+              </div>
+              <div className="mt-4 space-y-3">
+                <MetricLineTight label="任务进度" value={student.progress} />
+                <MetricLineTight label="适岗信号" value={getFitAverage(student)} />
               </div>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-800">
-              AI 陪跑建议：{getCoachAdvice(student)}
+              {getAiQuickJudgement(student)}
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <p className="mb-2 text-sm font-semibold text-slate-800">当前风险线索</p>
@@ -980,89 +1255,409 @@ function StudentWorkspace({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>我的成长路径</CardTitle>
-                <CardDescription>入营 → 上手 → 协同 → 产出 → 适岗复盘</CardDescription>
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>带教节奏导航</CardTitle>
+                  <CardDescription>不是固定学习路径，而是帮助新人、导师和 HRBP 对齐本周节奏</CardDescription>
+                </div>
+                <Badge variant="green">科技向善：把支持做得更及时</Badge>
               </div>
-              <Badge variant="green">科技向善：把支持做得更及时</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <GrowthPath currentStage={student.stage} />
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-800">本周岗位任务</p>
+            </CardHeader>
+            <CardContent>
+              <RhythmStepper
+                currentStage={student.stage}
+                activeStage={activeStage}
+                onChange={setActiveStage}
+                role={student.role}
+                feedbackCount={student.feedbackCount}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-blue-100 bg-blue-50/50">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>本周导航摘要</CardTitle>
+                  <CardDescription>{navigation.summary}</CardDescription>
+                </div>
+                <Badge variant="blue">三方协同</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ["实习生下一步", navigation.intern],
+                  ["导师下一步", navigation.mentor],
+                  ["HRBP 关注点", navigation.hrbp]
+                ].map(([label, value]) => (
+                  <button
+                    key={label}
+                    onClick={() => setActiveSummaryAction(label)}
+                    className={cn(
+                      "cursor-pointer rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-sm",
+                      activeSummaryAction === label ? "border-blue-300 bg-white shadow-sm" : "border-blue-100 bg-white/70"
+                    )}
+                  >
+                    <p className="text-xs font-medium text-blue-600">{label}</p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{value}</p>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>{activeStage}阶段任务导航</CardTitle>
+                  <CardDescription>
+                    当前查看第 {activeStageIndex + 1} 段节奏，任务卡会同时沉淀导师检视标准和 HRBP 适岗信号。
+                  </CardDescription>
+                </div>
                 <Badge variant="blue">{student.role}路径</Badge>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {tasks.map((task) => {
-                  const completed = student.completedTaskIds.includes(task.id);
-                  return (
-                    <button
-                      key={task.id}
-                      onClick={() => onToggleTask(student, task.id)}
-                      className={cn(
-                        "group flex min-h-[112px] cursor-pointer items-start gap-3 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md",
-                        completed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white hover:border-blue-200"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
-                          completed ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-slate-400"
-                        )}
-                      >
-                        {taskLoadingId === task.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : completed ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-slate-900">{task.title}</span>
-                        <span className="mt-2 block text-sm leading-6 text-slate-500">{task.evidence}</span>
-                      </span>
-                    </button>
-                  );
-                })}
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 xl:grid-cols-2">
+                {tasks.map((task) => (
+                  <TaskNavigationCard
+                    key={task.id}
+                    task={task}
+                    student={student}
+                    status={getTaskStatus(student, task.id)}
+                    expanded={expandedTaskId === task.id}
+                    taskLoading={taskLoadingId === task.id}
+                    feedbackRequestLoading={feedbackRequestLoadingId === task.id}
+                    onToggleExpand={() => setExpandedTaskId((current) => (current === task.id ? null : task.id))}
+                    onOpenDetail={() => setDetailTask(task)}
+                    onSubmitProgress={() => {
+                      if (!student.completedTaskIds.includes(task.id)) {
+                        onToggleTask(student, task.id);
+                      }
+                    }}
+                    onRequestFeedback={() => onRequestFeedback(student, task.id)}
+                  />
+                ))}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <CourseTagStrip />
+        </div>
       </div>
+      <TaskDetailSheet task={detailTask} open={Boolean(detailTask)} onOpenChange={(open) => !open && setDetailTask(null)} />
     </div>
   );
 }
 
-function GrowthPath({ currentStage }: { currentStage: GrowthStage }) {
-  const timeMarks = ["Day 1", "Day 7", "Day 14", "Day 30", "Day 60"];
+function RhythmStepper({
+  currentStage,
+  activeStage,
+  onChange,
+  role,
+  feedbackCount
+}: {
+  currentStage: GrowthStage;
+  activeStage: GrowthStage;
+  onChange: (stage: GrowthStage) => void;
+  role: InternshipRole;
+  feedbackCount: number;
+}) {
   const currentIndex = growthStages.indexOf(currentStage);
 
   return (
-    <div className="grid gap-3 md:grid-cols-5">
+    <div className="grid gap-2 md:grid-cols-5">
       {growthStages.map((stage, index) => {
-        const active = index <= currentIndex;
+        const finished = index < currentIndex;
+        const active = stage === activeStage;
+        const taskCount = getStageTasks(role, stage).length;
+        const signalCount = new Set(getStageTasks(role, stage).flatMap((task) => task.hrSignal.split("、"))).size;
         return (
-          <div
+          <button
             key={stage}
+            onClick={() => onChange(stage)}
             className={cn(
-              "relative rounded-2xl border p-4",
-              active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"
+              "flex min-h-[86px] cursor-pointer flex-col justify-between rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm",
+              active ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white"
             )}
           >
-            <p className={cn("text-xs", active ? "text-blue-600" : "text-slate-400")}>{timeMarks[index]}</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{stage}</p>
-            {stage === currentStage && (
-              <span className="mt-3 inline-flex rounded-full bg-blue-600 px-2.5 py-1 text-xs font-medium text-white">当前阶段</span>
-            )}
-          </div>
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-500">{rhythmMarks[stage]}</span>
+              {finished ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : stage === currentStage ? (
+                <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">当前</span>
+              ) : null}
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-slate-950">{stage}</span>
+              <span className="mt-1 block text-xs text-slate-500">
+                {taskCount}项任务 · {Math.min(feedbackCount, 3)}条反馈 · {signalCount}个信号
+              </span>
+            </span>
+          </button>
         );
       })}
+    </div>
+  );
+}
+
+function CompactKpi({ label, value, suffix }: { label: string; value: number; suffix: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold leading-none text-slate-950">
+        {value}
+        <span className="ml-0.5 text-sm text-slate-500">{suffix}</span>
+      </p>
+    </div>
+  );
+}
+
+function MetricLineTight({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="grid grid-cols-[78px_1fr_40px] items-center gap-2">
+      <span className="text-xs text-slate-500">{label}</span>
+      <Progress value={value} />
+      <span className="text-right text-xs font-medium text-slate-600">{value}%</span>
+    </div>
+  );
+}
+
+function TaskNavigationCard({
+  task,
+  student,
+  status,
+  expanded,
+  taskLoading,
+  feedbackRequestLoading,
+  onToggleExpand,
+  onOpenDetail,
+  onSubmitProgress,
+  onRequestFeedback
+}: {
+  task: DetailedTask;
+  student: GrowthStudent;
+  status: TaskStatus;
+  expanded: boolean;
+  taskLoading: boolean;
+  feedbackRequestLoading: boolean;
+  onToggleExpand: () => void;
+  onOpenDetail: () => void;
+  onSubmitProgress: () => void;
+  onRequestFeedback: () => void;
+}) {
+  const completed = status === "已完成";
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onOpenDetail();
+      }}
+      className="group min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-950">{task.title}</h3>
+            <Badge variant={getStatusVariant(status)}>{status}</Badge>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant="blue">{task.ability}</Badge>
+            <Badge variant="default">查看详情</Badge>
+          </div>
+        </div>
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600" />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <TaskInfoRow label="任务目标" value={task.goal} />
+        <TaskInfoRow label="交付物" value={task.deliverable} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SignalBox tone="blue" title="导师看什么" value={task.mentorStandard} />
+          <SignalBox tone="green" title="HRBP 看什么" value={`沉淀${task.hrSignal}信号`} />
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <p className="mb-3 text-sm font-semibold text-blue-900">AI 拆解步骤</p>
+              <div className="grid gap-2">
+                {[
+                  `第一步：先看与「${task.title}」相关的业务材料和历史样例。`,
+                  "第二步：准备 3 个问题：目标是什么、卡点在哪里、怎样算完成。",
+                  `第三步：按模板输出交付物：${task.deliverable}`,
+                  "第四步：把交付物发给导师，请导师按检视标准给出一条具体反馈。"
+                ].map((step) => (
+                  <div key={step} className="rounded-lg bg-white px-3 py-2 text-sm leading-6 text-blue-800">
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleExpand();
+          }}
+          className="cursor-pointer"
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+          AI 拆解步骤
+        </Button>
+        <Button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSubmitProgress();
+          }}
+          disabled={completed || taskLoading}
+          className="cursor-pointer"
+        >
+          {taskLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-4 w-4" />}
+          {completed ? "已提交" : "提交进展"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestFeedback();
+          }}
+          disabled={feedbackRequestLoading}
+          className="cursor-pointer"
+        >
+          {feedbackRequestLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquareText className="mr-2 h-4 w-4" />}
+          请求导师反馈
+        </Button>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        已沉淀证据：{student.completedTaskIds.includes(task.id) ? "任务完成记录、交付物和适岗信号" : "提交进展后会同步更新进度、能量和 HRBP 看板"}
+      </p>
+    </div>
+  );
+}
+
+function TaskInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function SignalBox({ title, value, tone }: { title: string; value: string; tone: "blue" | "green" }) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-3",
+        tone === "blue" && "border-blue-100 bg-blue-50 text-blue-800",
+        tone === "green" && "border-emerald-100 bg-emerald-50 text-emerald-800"
+      )}
+    >
+      <p className="text-xs font-semibold">{title}</p>
+      <p className="mt-1 text-sm leading-6">{value}</p>
+    </div>
+  );
+}
+
+function TaskDetailSheet({
+  task,
+  open,
+  onOpenChange
+}: {
+  task: DetailedTask | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!task) return <Sheet open={open} onOpenChange={onOpenChange} />;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="max-w-xl sm:max-w-[620px]">
+        <SheetHeader>
+          <SheetTitle>{task.title}</SheetTitle>
+          <SheetDescription>任务详情、交付模板、导师评分标准与 HRBP 适岗信号</SheetDescription>
+        </SheetHeader>
+        <div className="space-y-5">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
+            <h3 className="mb-2 font-semibold text-white">任务说明</h3>
+            <p className="text-sm leading-7 text-slate-300">{task.goal}</p>
+          </div>
+          <div className="rounded-xl border border-cyan-300/25 bg-cyan-400/10 p-4">
+            <h3 className="mb-3 font-semibold text-white">交付物模板</h3>
+            <div className="space-y-2">
+              {task.template.map((item) => (
+                <div key={item} className="rounded-lg bg-white/[0.08] p-3 text-sm leading-6 text-cyan-50">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
+            <h3 className="mb-3 font-semibold text-white">导师评分标准</h3>
+            <div className="space-y-2">
+              {task.rubric.map((item) => (
+                <div key={item} className="flex gap-2 rounded-lg bg-white/[0.08] p-3 text-sm leading-6 text-slate-200">
+                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-300" />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-4">
+            <h3 className="mb-2 font-semibold text-white">HRBP 适岗信号</h3>
+            <p className="text-sm leading-7 text-emerald-50">{task.hrSignal}</p>
+          </div>
+          <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-7 text-amber-50">
+            AI 边界提示：任务信号只帮助 HRBP 和导师定位沟通重点，不直接作为留用、淘汰或评价依据。
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function CourseTagStrip() {
+  const tags = [
+    ["沟通型 HR", "把实习生、导师、HRBP 的信息从私聊里拉到同一张看板"],
+    ["分析型 HR", "用任务、反馈、风险和适岗信号辅助判断"],
+    ["创意型 HR", "用鹅苗星图和成长能量让成长过程可感知"],
+    ["技术应用型 HR", "用 API、AI 反馈和工作台把带教流程产品化"]
+  ];
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {tags.map(([title, desc]) => (
+        <div key={title} className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-950">{title}</p>
+          <p className="mt-2 text-xs leading-6 text-slate-500">{desc}</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1091,7 +1686,7 @@ function MentorWorkspace({
   onSubmit: () => void;
 }) {
   const pendingStudents = [...students]
-    .filter((student) => student.feedbackCount < 2 || student.riskLevel !== "low")
+    .filter((student) => student.feedbackCount < 2 || student.riskLevel !== "low" || student.tags.includes("请求反馈"))
     .sort((a, b) => b.progress - a.progress)
     .slice(0, 7);
   const feedbackRate = Math.round((students.filter((student) => student.feedbackCount >= 2).length / students.length) * 100);
@@ -1135,6 +1730,7 @@ function MentorWorkspace({
                     <span className="block text-sm font-semibold text-slate-900">{student.name}</span>
                     <span className="block text-xs text-slate-500">
                       {student.role} · 反馈 {student.feedbackCount} 次
+                      {student.tags.includes("请求反馈") ? " · 请求反馈" : ""}
                     </span>
                   </span>
                   <Badge variant={getRiskBadgeVariant(student.riskLevel)}>{getRiskMeta(student.riskLevel).label}</Badge>
