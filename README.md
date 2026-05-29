@@ -1,56 +1,31 @@
 # 鹅苗星图 Emiao Growth Map
 
-在线 Demo 链接占位：
+在线体验：
+> Render 部署完成后，把线上地址填在这里。
 
-> Render 部署完成后，将线上地址填写到这里。
-
-截图占位：
-
-| 剧情开场页 | HRBP 证据页 | 报告生成页 |
-| --- | --- | --- |
-| ![剧情开场页](./docs/screenshots/hero-placeholder.svg) | ![HRBP 证据页](./docs/screenshots/hr-workbench-placeholder.svg) | ![报告生成页](./docs/screenshots/student-sheet-placeholder.svg) |
-
-## 作业对应关系
-
-本项目对应腾讯 AI-HR 培训生线上实战营作业四：「实习能量站」业务部新人成长导航智能看板。
-
-它不是作业三的“30-60-90 学习路径”。主线是“入营 → 上手 → 协同 → 产出 → 适岗复盘”的实习生成长导航，并用 W1 / W2 / W3 / W4 / 复盘作为节奏标记。
+对应作业：腾讯 AI-HR 培训生线上实战营作业四「实习能量站」业务部新人成长导航智能看板。  
+说明：本项目不是作业三的 30-60-90 学习路径，而是围绕业务部实习生、导师、HRBP 三方协同的成长导航工具。
 
 ## 项目亮点
 
-- 模拟后端 API：使用 Next.js Route Handlers 和 server-side memory store，核心数据通过 API 读写。
-- 剧情式多页面主流程：首页不再是 dashboard，而是从暴雨入营夜开始的 Story Mode。
-- 三角色工作台：实习生、导师、HRBP 都有自己的可操作页面。
-- 数据闭环：任务完成 → 导师反馈 → 风险识别 → KPI 更新 → AI 周报生成。
-- 适岗证据链：学生详情抽屉展示任务证据、导师证据、行为信号和 AI 建议。
-- 最终产出物：支持生成 LaTeX 风格《鹅苗成长导航复盘报告》，下载 `.tex`，PDF 编译失败时提供 fallback。
-- AI 边界说明：AI 风险判断只作为沟通线索，不直接作为留用、淘汰或评价依据。
+- 单人主线 Story Mode：用户始终扮演 AI-HRBP，只围绕一名实习生完成完整闭环。
+- 模拟后端 API：任务、反馈、事件、周报和报告都通过 Next.js Route Handlers 读写。
+- 数据闭环：提交任务进展 → 生成导师检查点 → 写入结构化反馈 → HRBP 查看适岗证据链 → 生成复盘报告。
+- 适岗证据链：把任务证据、导师证据、行为信号和 AI 建议放在同一页。
+- AI 边界说明：AI 只负责整理、提醒、归纳和初步判断，不直接作为留用、淘汰或评价依据。
+- 高级模式保留：`/dashboard` 保留 20 人数据、AI 周报和完整工作台。
 
-## 页面章节
+## 主线页面
 
-- `/`：剧情开场页，雨夜 / 数据雨动效，启动鹅苗星图。
-- `/briefing`：任务简报页，解释实习生、导师、HRBP 的三类痛点。
-- `/profile`：创建鹅苗档案页，选择产品鹅 / 研发鹅 / 销售鹅并填写档案。
-- `/mission`：成长导航任务页，完成岗位任务、AI 拆解、提交进展、请求导师反馈。
-- `/mentor`：导师检查点页，生成结构化反馈。
-- `/hrbp`：HRBP 适岗证据页，展示雷达图和证据链。
-- `/report`：生成 LaTeX / PDF 报告页。
-- `/dashboard`：保留原综合工作台，作为高级模式入口。
-
-## 模拟后端接口
-
-Demo 阶段使用内存数据，不需要真实数据库。真实落地时可接入 HRIS、招聘系统、员工系统和企业 IM。
-
-- `GET /api/students`：返回 20 名实习生数据和看板指标。
-- `PATCH /api/students/[id]/tasks`：更新任务完成状态，并重新计算进度、能量、阶段和风险。
-- `POST /api/feedback`：模拟 AI 生成结构化反馈，写入学生档案。
-- `POST /api/feedback/request`：学生请求导师围绕某个任务补充反馈。
-- `POST /api/weekly-report`：基于当前任务、反馈、风险生成 AI 周报。
-- `POST /api/report/latex`：根据当前学生生成 LaTeX 报告字符串。
-- `GET /api/report/tex`：下载最近生成的 `.tex` 文件。
-- `POST /api/report/pdf`：尝试编译 PDF，失败时返回浏览器打印 fallback。
-- `GET /api/events`：返回最近操作记录。
-- `POST /api/reset`：重置演示数据，方便录制视频。
+- `/`：任务接入页，AI-HRBP 收到业务部求助。
+- `/briefing`：业务求助简报，说明实习生迷茫、导师凭经验、HRBP 信息断点。
+- `/profile`：5 步创建鹅苗档案，每步只问一个问题。
+- `/diagnosis`：成长困惑诊断，将“我不知道”拆成目标不清、交付不清、反馈不清。
+- `/mission`：本周成长任务，只围绕当前实习生推进一个可验证交付。
+- `/mentor`：导师检查点，生成肯定、建议、下周行动三段式反馈。
+- `/hrbp`：HRBP 适岗证据链，适合作为参赛截图。
+- `/report`：生成 LaTeX 风格成长复盘报告，PDF 不可编译时提供 fallback。
+- `/dashboard`：高级工作台，保留 20 人全量数据和 AI 周报。
 
 ## 本地运行
 
@@ -59,10 +34,22 @@ npm install
 npm run dev
 ```
 
-打开：
+默认打开：
 
 ```txt
 http://localhost:3000
+```
+
+如果 3000 被其他项目占用：
+
+```bash
+npm run dev -- -p 3001
+```
+
+然后打开：
+
+```txt
+http://localhost:3001
 ```
 
 生产构建检查：
@@ -74,79 +61,55 @@ npm run start
 
 ## Render 部署
 
-1. 打开 Render Dashboard，选择 **New + → Web Service**。
+1. 在 Render 创建 Web Service。
 2. 连接 GitHub 仓库 `hansu650/tencent-homework`。
-3. Root Directory 保持仓库根目录。
-4. Runtime 选择 `Node`。
-5. Build Command：
+3. Runtime 选择 Node。
+4. Build Command：
 
 ```bash
 npm install && npm run build
 ```
 
-6. Start Command：
+5. Start Command：
 
 ```bash
 npm run start
 ```
 
-7. Node 版本建议使用 `22.13.0` 或仓库 `package.json` 中允许的 Node 22+ 版本。
+6. Node 版本建议使用 `22.12.0` 或更高。
+
+## API 说明
+
+Demo 阶段使用服务端内存数据，不需要数据库。真实落地时可接入 HRIS、招聘系统、员工系统和企业 IM。
+
+- `GET /api/students`：返回 20 名实习生数据。
+- `PATCH /api/students/[id]/tasks`：更新某个学生任务完成状态，并重新计算进度、能量、阶段和风险。
+- `POST /api/feedback/request`：生成导师待反馈记录。
+- `POST /api/feedback`：模拟 AI 生成结构化反馈并写入学生档案。
+- `POST /api/weekly-report`：基于当前学生状态生成 AI 周报。
+- `GET /api/events`：返回最近操作记录。
+- `POST /api/reset`：重置演示数据，方便录视频。
+- `POST /api/report/latex`：生成 LaTeX 报告。
+- `GET /api/report/tex`：下载最近生成的 `.tex` 文件。
+- `POST /api/report/pdf`：尝试编译 PDF，失败时返回打印 PDF fallback。
 
 ## 1 分钟演示路径
 
-0-8 秒：打开剧情开场页，说明“暴雨入营夜”里 20 名实习生、导师和 HRBP 的信息断点正在出现，点击“启动鹅苗星图”。
+0-8 秒：打开 `/`，说明你扮演 AI-HRBP，接到业务部求助。  
+8-16 秒：进入 `/briefing`，展示三类问题：实习生迷茫、导师凭经验、HRBP 信息断点。  
+16-28 秒：进入 `/profile`，一步一步选择岗位、输入姓名、选择困惑、选择导师。  
+28-36 秒：进入 `/diagnosis`，说明 AI 把“我不知道”拆成可行动线索。  
+36-46 秒：进入 `/mission`，选择任务，点击 AI 拆解，再提交一次进展。  
+46-54 秒：进入 `/mentor`，输入导师观察，生成肯定、建议、下周行动。  
+54-60 秒：进入 `/hrbp` 和 `/report`，展示适岗证据链、AI 边界和成长复盘报告。
 
-8-16 秒：进入任务简报，展示实习生迷茫、导师凭经验、HRBP 信息断点三张问题卡。
+## 适合截图的页面
 
-16-28 秒：创建鹅苗档案，选择产品鹅 / 研发鹅 / 销售鹅，填写姓名、岗位、导师和当前困惑，生成成长导航卡。
-
-28-42 秒：进入成长导航任务页，点击 AI 拆解、提交进展、请求导师反馈，展示任务、导师标准和 HRBP 信号联动。
-
-42-52 秒：进入导师检查点，生成“肯定 / 建议 / 下周行动”结构化反馈。
-
-52-60 秒：进入 HRBP 证据页和报告页，展示适岗证据链、AI 边界提醒，并生成 LaTeX 报告。
+- `/`：克制的 AI-HRBP 任务接入页。
+- `/profile`：一步一问的鹅苗档案创建页。
+- `/hrbp`：适岗证据链和雷达图。
+- `/report`：正式报告预览和生成步骤。
 
 ## 300 字提交说明
 
-我的作品叫“鹅苗星图 Emiao Growth Map”，对应作业四「实习能量站」业务部新人成长导航智能看板。它不是普通后台，而是一个剧情式 AI-HR Demo：从“暴雨入营夜”的任务简报开始，用户创建第一位鹅苗档案，完成岗位任务，请求导师反馈，再进入 HRBP 适岗证据页，最终生成《鹅苗成长导航复盘报告》。产品解决的是实习生、导师、HRBP 三方协作中的信息断点：新人不知道下一步做什么，导师反馈依赖经验，HRBP 难以及时看到适岗证据。AI 在其中负责整理、提醒、归纳和初步风险识别，不替代导师和 HRBP 的沟通分寸与最终判断。作品体现沟通型、分析型、创意型、技术应用型 HR 能力，也把用户为本、科技向善、正直、进取、协作、创造融入功能。
-
-## 目录结构
-
-```txt
-app/
-  api/
-    events/
-    feedback/
-    reset/
-    students/
-    weekly-report/
-  globals.css
-  layout.tsx
-  page.tsx
-components/
-  emiao-growth-map.tsx
-  story-mode.tsx
-  star-map.tsx
-  ui/
-data/
-  mockStudents.ts
-lib/
-  demo-store.ts
-  growth.ts
-  report-builder.ts
-  report-cache.ts
-  story-content.ts
-  utils.ts
-```
-
-## 技术栈
-
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- shadcn/ui 风格组件
-- lucide-react
-- Recharts
-- framer-motion
-- Next.js Route Handlers 模拟后端
-    report/
+我的作品叫「鹅苗星图 Emiao Growth Map」，对应作业四「实习能量站」业务部新人成长导航智能看板。它不是作业三的 30-60-90 学习路径，而是把实习生、导师和 HRBP 的协同做成一条可体验的 AI-HR 主线。用户扮演 AI-HRBP，从接收业务部求助开始，为一名实习生创建档案、识别成长困惑、生成本周岗位任务、提交进展、触发导师检查点，再把导师反馈沉淀为 HRBP 可用的适岗证据链，最后生成《鹅苗成长导航复盘报告》。产品解决的核心问题是：实习生不知道下一步做什么，导师带教标准依赖经验，HRBP 难以及时看到适岗证据。AI 在其中不替代导师和 HRBP，只负责整理、提醒、归纳和初步判断，最终沟通分寸和录用判断仍由人完成。作品体现了沟通型 HR、分析型 HR、创意型 HR 和技术应用型 HR 能力，也把用户为本、科技向善、正直、进取、协作、创造融入到功能流程中。

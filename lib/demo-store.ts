@@ -1,4 +1,4 @@
-import type { InternshipRole, RiskLevel } from "@/data/mockStudents";
+import type { InternshipRole } from "@/data/mockStudents";
 import {
   buildFeedbackBlocks,
   getCompletedTasks,
@@ -257,10 +257,7 @@ export function updateStudentTask(studentId: string, taskId: string, completed: 
   });
 
   store.students = store.students.map((item) => (item.id === studentId ? nextStudent : item));
-  addEvent(
-    "task",
-    `${student.name}${completed ? "完成" : "取消完成"}「${task.title}」，成长进度更新为 ${nextStudent.progress}%。`
-  );
+  addEvent("task", `${student.name}${completed ? "完成" : "取消完成"}「${task.title}」，成长进度更新为 ${nextStudent.progress}%。`);
 
   return {
     student: clone(nextStudent),
@@ -294,7 +291,7 @@ export function createFeedback(studentId: string, mentorNote: string) {
   });
 
   store.students = store.students.map((item) => (item.id === studentId ? nextStudent : item));
-  addEvent("feedback", `导师为${student.name}生成结构化反馈，反馈次数更新为 ${nextStudent.feedbackCount} 次。`);
+  addEvent("feedback", `导师为 ${student.name} 生成结构化反馈，反馈次数更新为 ${nextStudent.feedbackCount} 次。`);
 
   return {
     feedback: clone(feedback),
@@ -321,7 +318,7 @@ export function requestMentorFeedback(studentId: string, taskId: string) {
   });
 
   store.students = store.students.map((item) => (item.id === studentId ? nextStudent : item));
-  addEvent("feedback-request", `${student.name}请求导师围绕「${task.title}」补充反馈，已进入导师待办。`);
+  addEvent("feedback-request", `${student.name} 请求导师围绕「${task.title}」补充反馈，已进入导师待办。`);
 
   return {
     student: clone(nextStudent),
@@ -345,7 +342,9 @@ export function generateWeeklyReport() {
   const missingFeedbackCount = metrics.riskCounts.find((item) => item.name === "反馈缺失")?.value ?? 0;
   const unclearCount = metrics.riskCounts.find((item) => item.name === "目标不清")?.value ?? 0;
 
-  const overview = `本周 ${metrics.total} 名实习生平均任务完成率 ${metrics.averageProgress}%，导师反馈及时率 ${metrics.feedbackTimelyRate}%。当前需关注 ${metrics.focusCount} 人，高适岗信号 ${metrics.highFitCount} 人；风险主要集中在${topRiskRole.count > 0 ? topRiskRole.role : "暂无明显集中岗位"}方向。任务滞后 ${lateCount} 人，反馈缺失 ${missingFeedbackCount} 人，目标不清 ${unclearCount} 人。`;
+  const overview = `本周 ${metrics.total} 名实习生平均任务完成率 ${metrics.averageProgress}%，导师反馈及时率 ${metrics.feedbackTimelyRate}%。当前需关注 ${metrics.focusCount} 人，高适岗信号 ${metrics.highFitCount} 人；风险主要集中在 ${
+    topRiskRole.count > 0 ? topRiskRole.role : "暂无明显集中岗位"
+  }方向。任务滞后 ${lateCount} 人，反馈缺失 ${missingFeedbackCount} 人，目标不清 ${unclearCount} 人。`;
 
   const riskStudents = focusStudents.slice(0, 6).map((student) => {
     const reasons = getRiskReasons(student);
@@ -361,7 +360,8 @@ export function generateWeeklyReport() {
     ? mentors.map((mentor) => `提醒导师 ${mentor} 补充场景化反馈，重点写清事实、影响和下周行动。`)
     : ["本周导师反馈节奏稳定，可继续沉淀高适岗同学的独立任务证据。"];
 
-  const boundary = "AI 风险判断仅作为 HRBP 与导师沟通线索，不直接作为留用、淘汰或评价依据；最终判断仍需结合业务反馈、导师面谈和 HRBP 的人情分寸。";
+  const boundary =
+    "AI 风险判断仅作为 HRBP 与导师沟通线索，不直接作为留用、淘汰或评价依据；最终判断仍需结合业务反馈、导师面谈和 HRBP 的人情分寸。";
 
   const markdown = [
     "# 鹅苗星图 AI 本周成长周报",

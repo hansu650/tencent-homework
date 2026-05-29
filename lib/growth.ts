@@ -68,10 +68,7 @@ export function getRiskReasons(student: GrowthStudent) {
 
   if (student.progress < 60 || completionRatio < 0.5) reasons.push("任务滞后");
   if (student.feedbackCount < 2) reasons.push("反馈缺失");
-  if (
-    student.tags.includes("目标不清") ||
-    (student.progress < 72 && student.fitSignals.businessUnderstanding < 68)
-  ) {
+  if (student.tags.includes("目标不清") || (student.progress < 72 && student.fitSignals.businessUnderstanding < 68)) {
     reasons.push("目标不清");
   }
   if (student.tags.includes("融入慢") || student.fitSignals.collaboration < 60) {
@@ -171,13 +168,13 @@ export function getCoachAdvice(student: GrowthStudent) {
 export function buildFeedbackBlocks(student: GrowthStudent, note: string): MentorFeedback {
   const cleanNote = note.trim() || "能主动跟进任务，但在拆解问题时还需要更结构化。";
   const roleAction: Record<InternshipRole, string> = {
-    产品: "下周先用“背景-问题-方案-风险”框架整理一个需求，再和导师做 15 分钟校准。",
+    产品: "下周先用「背景-问题-方案-风险」框架整理一个需求，再和导师做 15 分钟校准。",
     研发: "下周选择一个低风险 issue，先写出影响范围和自测清单，再提交代码 Review。",
     销售: "下周完成一次客户沟通复盘，把客户异议整理成标签并给出下一步跟进动作。"
   };
 
   return {
-    praise: `你本周的表现有可见进步：${cleanNote}`,
+    praise: `本周值得保留的表现：${cleanNote}`,
     suggestion:
       student.riskLevel === "high"
         ? "当前更重要的是降低不确定性，及时暴露卡点，不要独自消化到任务延期。"
@@ -209,7 +206,9 @@ export function getWeeklySummary(studentsState: GrowthStudent[], variant = 0) {
       ? `本周 ${total} 名实习生平均任务完成率 ${taskRate}%`
       : `AI 已根据最新任务和反馈重新汇总：${total} 名实习生平均进度 ${taskRate}%`;
 
-  return `${opening}，导师反馈及时率 ${Math.round((timelyFeedback / total) * 100)}%。当前需关注 ${focusStudents.length} 人，高适岗信号 ${highFit} 人。主要风险集中在目标不清 ${unclear} 人、反馈缺失 ${missingFeedback} 人、任务滞后 ${late} 人；${topRole.count > 0 ? `${topRole.role}方向需要 HRBP 优先跟进。` : "整体节奏稳定，可继续沉淀适岗证据。"} 建议本周优先完成三件事：提醒低反馈导师补充场景化反馈，约谈连续低进度同学，给高适岗同学安排一次独立小任务验证。`;
+  return `${opening}，导师反馈及时率 ${Math.round((timelyFeedback / total) * 100)}%。当前需关注 ${focusStudents.length} 人，高适岗信号 ${highFit} 人。主要风险集中在目标不清 ${unclear} 人、反馈缺失 ${missingFeedback} 人、任务滞后 ${late} 人；${
+    topRole.count > 0 ? `${topRole.role}方向需要 HRBP 优先跟进。` : "整体节奏稳定，可继续沉淀适岗证据。"
+  } 建议本周优先完成三件事：提醒低反馈导师补充场景化反馈，约谈连续低进度同学，给高适岗同学安排一次独立小任务验证。`;
 }
 
 export function getPriorityActions(studentsState: GrowthStudent[]) {

@@ -10,18 +10,12 @@ export async function POST(request: NextRequest) {
     | null;
 
   if (!body?.studentId || !body.taskId) {
-    return NextResponse.json(
-      { error: "请提供 studentId 和 taskId。" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "请提供 studentId 和 taskId。" }, { status: 400 });
   }
 
   const result = requestMentorFeedback(body.studentId, body.taskId);
   if (!result) {
-    return NextResponse.json(
-      { error: "未找到学生或任务。" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "未找到学生或任务。" }, { status: 404 });
   }
 
   return NextResponse.json(result);

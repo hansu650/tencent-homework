@@ -14,18 +14,12 @@ export async function PATCH(
     | null;
 
   if (!body?.taskId || typeof body.completed !== "boolean") {
-    return NextResponse.json(
-      { error: "请提供 taskId 和 completed。" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "请提供 taskId 和 completed。" }, { status: 400 });
   }
 
   const result = updateStudentTask(id, body.taskId, body.completed);
   if (!result) {
-    return NextResponse.json(
-      { error: "未找到学生或任务。" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "未找到学生或任务。" }, { status: 404 });
   }
 
   return NextResponse.json(result);

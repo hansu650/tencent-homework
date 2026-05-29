@@ -77,7 +77,6 @@ ${escapeTex(student.nextAction)}
 
 \section{AI 风险判断与边界}
 当前风险线索：${escapeTex(risks.length ? risks.join("、") : "暂无明显风险")}。
-
 \textbf{边界说明：}AI 风险判断仅作为 HRBP 与导师沟通线索，不直接作为留用、淘汰或评价依据。AI 不替代导师和 HRBP，只负责整理、提醒、归纳和初步判断，最终沟通、分寸和决策仍由人完成。
 
 \section{下一步成长建议}
@@ -87,7 +86,7 @@ ${escapeTex(student.nextAction)}
 \begin{itemize}[leftmargin=*]
   \item 沟通型 HR：把实习生、导师、HRBP 从私聊中连接到同一张成长地图。
   \item 分析型 HR：通过任务、反馈、行为信号形成适岗证据链。
-  \item 创意型 HR：用故事、角色、星图、报告让企业文化和成长过程可感知。
+  \item 创意型 HR：用单人主线、档案、导航卡和报告让成长过程可感知。
   \item 技术应用型 HR：用 API、AI 反馈、LaTeX 报告和工作台把带教流程产品化。
 \end{itemize}
 
