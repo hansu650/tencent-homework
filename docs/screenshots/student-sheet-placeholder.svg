@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
-  <rect width="960" height="540" fill="#07111F"/>
-  <rect x="430" y="0" width="530" height="540" fill="#0E1A2F" stroke="#00C2FF" stroke-opacity=".45"/>
-  <text x="470" y="84" fill="#E0F2FE" font-family="Arial, sans-serif" font-size="34" font-weight="700">Student Sheet Placeholder</text>
-  <text x="470" y="130" fill="#93C5FD" font-family="Arial, sans-serif" font-size="22">Evidence Chain / Radar Chart</text>
-  <polygon points="695,190 810,254 766,392 624,392 580,254" fill="#1664FF" fill-opacity=".25" stroke="#00C2FF"/>
-  <circle cx="695" cy="300" r="5" fill="#22C55E"/>
-</svg>

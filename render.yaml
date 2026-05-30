@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: emiao-growth-map
+    name: emiao-growth-script
     runtime: node
     plan: free
     buildCommand: npm install && npm run build

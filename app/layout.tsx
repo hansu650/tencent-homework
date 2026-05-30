@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "鹅苗星图 Emiao Growth Map",
-  description: "AI 实习生成长导航看板，用 AI 连接任务、反馈、风险和适岗信号。"
+  title: "鹅苗成长副本 | AI Native 新人 30-60-90 路径生成器",
+  description:
+    "腾讯 AI-HR 培训生线上实战营作业三：为 AI Native 组织新人生成 30-60-90 学习、协作与产出计划。"
 };
 
 export default function RootLayout({
@@ -17,3 +18,4 @@ export default function RootLayout({
     </html>
   );
 }
+

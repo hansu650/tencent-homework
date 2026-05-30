@@ -1,5 +1,6 @@
-import { OpeningPage } from "@/components/story-mode";
+import { HomePage } from "@/components/growth-script-app";
 
 export default function Home() {
-  return <OpeningPage />;
+  return <HomePage />;
 }
+

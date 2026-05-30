@@ -1,5 +1,6 @@
-import { ReportPage } from "@/components/story-mode";
+import { ReportPage } from "@/components/growth-script-app";
 
-export default function Page() {
+export default function Report() {
   return <ReportPage />;
 }
+

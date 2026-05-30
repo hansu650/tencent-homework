@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 
-import { buildLatexReport, findReportStudent } from "@/lib/report-builder";
-import { getReportCache, setReportCache } from "@/lib/report-cache";
+import { buildLatexReport, reportFilename } from "@/lib/report-builder";
+import { defaultProfile } from "@/lib/growth-script";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  const cached = getReportCache() ?? buildLatexReport(findReportStudent());
-  setReportCache(cached);
+  const filename = reportFilename(defaultProfile);
 
-  return new NextResponse(cached.tex, {
+  return new NextResponse(buildLatexReport(defaultProfile), {
     headers: {
       "Content-Type": "application/x-tex; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${cached.filename}"`
+      "Content-Disposition": `attachment; filename="${filename}"`
     }
   });
 }
+
