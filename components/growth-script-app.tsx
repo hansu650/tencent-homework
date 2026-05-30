@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  ArrowRight,
-  ChevronLeft,
-  Download,
-  FileText,
-  RefreshCw
-} from "lucide-react";
+import { ArrowRight, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -142,70 +136,23 @@ function applySample(profile: GrowthProfile, router?: ReturnType<typeof useRoute
   router?.push("/plan");
 }
 
-function SampleDataPanel({
-  compact = false,
-  onApply
-}: {
-  compact?: boolean;
-  onApply?: (profile: GrowthProfile) => void;
-}) {
+function QuickSamples({ onApply }: { onApply: (profile: GrowthProfile) => void }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
-      <CardContent className={cn("p-5", compact && "p-4")}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-950">选择测试数据</p>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              不想一步步填，也可以直接套用一组样例。
-            </p>
-          </div>
-          <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500">
-            可测试
-          </span>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {sampleProfiles.map((sample) => (
-            <button
-              key={sample.name}
-              type="button"
-              onClick={() => onApply?.(sample.profile)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition-colors hover:border-[#176BFF] hover:bg-white"
-            >
-              <p className="text-sm font-medium text-slate-950">{sample.name}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">{sample.note}</p>
-            </button>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TimelinePreview() {
-  return (
-    <Card className="border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-6">
-        <p className="text-sm font-medium text-slate-500">路径预览</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-normal">
-          30 / 60 / 90
-        </h2>
-        <div className="mt-6 space-y-5">
-          {[
-            ["30 天", "理解业务与 AI 工具"],
-            ["60 天", "参与协作与真实任务"],
-            ["90 天", "完成可复盘小项目"]
-          ].map(([day, text], index) => (
-            <div key={day} className="grid grid-cols-[64px_1fr] gap-4">
-              <div className="text-sm font-semibold text-[#176BFF]">{day}</div>
-              <div>
-                <p className="text-sm font-medium text-slate-950">{text}</p>
-                {index < 2 ? <div className="mt-4 h-px bg-slate-200" /> : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div>
+      <p className="text-sm font-medium text-slate-500">快速体验</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {sampleProfiles.map((sample) => (
+          <button
+            key={sample.name}
+            type="button"
+            onClick={() => onApply(sample.profile)}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition-colors hover:border-[#176BFF] hover:text-[#176BFF]"
+          >
+            {sample.name.replace("测试组", "")}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -215,50 +162,30 @@ export function HomePage() {
   return (
     <PageShell>
       <SectionWrap>
-        <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-9">
-            <Badge className="border-[#D7E5FF] bg-[#F4F8FF] text-[#176BFF]">
-              腾讯 AI-HR 实战营作业三
-            </Badge>
-            <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-              鹅苗成长副本
-            </h1>
-            <p className="mt-4 text-xl font-medium text-slate-800">
-              AI Native 新人 30-60-90 路径生成器
-            </p>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
-              选择一组新人数据，生成 30 天入门、60 天协作、90 天产出的学习与融入计划。重点不是展示后台，而是让 HR 快速产出一份可复盘的成长路径。
-            </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="bg-[#176BFF]">
-                <Link href="/setup">
-                  开始生成成长副本
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/report">查看示例报告</Link>
-              </Button>
-            </div>
+        <div className="mx-auto max-w-4xl rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
+          <Badge className="border-[#D7E5FF] bg-[#F4F8FF] text-[#176BFF]">
+            腾讯 AI-HR 实战营作业三
+          </Badge>
+          <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl">
+            鹅苗成长副本
+          </h1>
+          <p className="mt-4 text-xl font-medium text-slate-800">
+            AI Native 新人 30-60-90 路径生成器
+          </p>
+          <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
+            选择岗位、AI 基础、成长目标和导师风格，生成一份可测试、可复盘的 30-60-90 新人成长路径。
+          </p>
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="bg-[#176BFF]">
+              <Link href="/setup">
+                开始生成
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
-          <div className="space-y-4">
-            <TimelinePreview />
-            <SampleDataPanel onApply={(profile) => applySample(profile, router)} />
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <QuickSamples onApply={(profile) => applySample(profile, router)} />
           </div>
-        </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {[
-            ["副本化成长", "把传统培养拆成 30/60/90 三个阶段。"],
-            ["导师验收卡", "同时给导师检查标准，避免只布置任务。"],
-            ["报告化沉淀", "最终生成可下载、可复盘的报告。"]
-          ].map(([title, text]) => (
-            <Card key={title} className="border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <p className="text-base font-semibold text-slate-950">{title}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{text}</p>
-              </CardContent>
-            </Card>
-          ))}
         </div>
       </SectionWrap>
     </PageShell>
@@ -311,6 +238,7 @@ export function SetupWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<Partial<GrowthProfile>>({ role: "product" });
+  const [showSamples, setShowSamples] = useState(false);
   const current = stepQuestions[step];
   const isConfirmStep = step === stepQuestions.length;
   const percent = Math.round(((step + 1) / 5) * 100);
@@ -340,98 +268,112 @@ export function SetupWizardPage() {
   return (
     <PageShell>
       <SectionWrap>
-        <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_300px]">
-          <div>
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => (step === 0 ? router.push("/") : setStep((value) => value - 1))}
-              >
-                <ChevronLeft className="mr-2 h-4 w-4" />
-                {step === 0 ? "返回首页" : "上一步"}
-              </Button>
-              <span className="text-sm text-slate-500">{percent}%</span>
-            </div>
-            <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-slate-200">
-              <motion.div
-                className="h-full rounded-full bg-[#176BFF]"
-                animate={{ width: `${percent}%` }}
-                transition={{ duration: 0.25 }}
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => (step === 0 ? router.push("/") : setStep((value) => value - 1))}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              {step === 0 ? "返回首页" : "上一步"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setShowSamples((value) => !value)}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 transition-colors hover:border-[#176BFF] hover:text-[#176BFF]"
+            >
+              一键填入样例
+            </button>
+          </div>
+          {showSamples ? (
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
+              <QuickSamples
+                onApply={(sample) => {
+                  setProfile(sample);
+                  setShowSamples(false);
+                  setStep(stepQuestions.length);
+                }}
               />
             </div>
-            <Card className="border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-6 sm:p-8">
-                <AnimatePresence mode="wait">
-                  {!isConfirmStep ? (
-                    <motion.div
-                      key={current.key}
-                      initial={{ opacity: 0, x: 12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -12 }}
-                      transition={{ duration: 0.22 }}
-                    >
-                      <Badge className="border-slate-200 bg-slate-50 text-slate-600">
-                        {current.eyebrow}
-                      </Badge>
-                      <h1 className="mt-5 text-3xl font-semibold tracking-normal text-slate-950">
-                        {current.title}
-                      </h1>
-                      <p className="mt-3 text-base leading-7 text-slate-500">
-                        {current.helper}
-                      </p>
-                      <div className="mt-7 grid gap-3">
-                        {current.options.map((option) => (
-                          <OptionCard
-                            key={option.id}
-                            option={option}
-                            selected={readStepValue(profile, current.key) === option.id}
-                            onSelect={() => selectValue(current.key, option.id)}
-                          />
-                        ))}
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="confirm"
-                      initial={{ opacity: 0, x: 12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -12 }}
-                      transition={{ duration: 0.22 }}
-                    >
-                      <Badge className="border-slate-200 bg-slate-50 text-slate-600">
-                        Step 5 / 5
-                      </Badge>
-                      <h1 className="mt-5 text-3xl font-semibold tracking-normal text-slate-950">
-                        确认生成这份成长副本
-                      </h1>
-                      <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                        {[
-                          ["岗位方向", plan.role.label],
-                          ["AI 基础", plan.aiLevel.label],
-                          ["成长目标", plan.growthGoal.label],
-                          ["导师风格", plan.mentorStyle.label]
-                        ].map(([label, value]) => (
-                          <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <p className="text-sm text-slate-500">{label}</p>
-                            <p className="mt-1 font-semibold text-slate-950">{value}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                  {selectedFeedback}
-                </div>
-                <Button type="button" size="lg" className="mt-7 w-full bg-[#176BFF]" onClick={next}>
-                  {isConfirmStep ? "生成 30-60-90 成长副本" : "继续"}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+          ) : null}
+          <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <motion.div
+              className="h-full rounded-full bg-[#176BFF]"
+              animate={{ width: `${percent}%` }}
+              transition={{ duration: 0.25 }}
+            />
           </div>
-          <SampleDataPanel compact onApply={(nextProfile) => applySample(nextProfile, router)} />
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-6 sm:p-8">
+              <AnimatePresence mode="wait">
+                {!isConfirmStep ? (
+                  <motion.div
+                    key={current.key}
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -12 }}
+                    transition={{ duration: 0.22 }}
+                  >
+                    <Badge className="border-slate-200 bg-slate-50 text-slate-600">
+                      {current.eyebrow}
+                    </Badge>
+                    <h1 className="mt-5 text-3xl font-semibold tracking-normal text-slate-950">
+                      {current.title}
+                    </h1>
+                    <p className="mt-3 text-base leading-7 text-slate-500">
+                      {current.helper}
+                    </p>
+                    <div className="mt-7 grid gap-3">
+                      {current.options.map((option) => (
+                        <OptionCard
+                          key={option.id}
+                          option={option}
+                          selected={readStepValue(profile, current.key) === option.id}
+                          onSelect={() => selectValue(current.key, option.id)}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="confirm"
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -12 }}
+                    transition={{ duration: 0.22 }}
+                  >
+                    <Badge className="border-slate-200 bg-slate-50 text-slate-600">
+                      Step 5 / 5
+                    </Badge>
+                    <h1 className="mt-5 text-3xl font-semibold tracking-normal text-slate-950">
+                      确认生成这份成长副本
+                    </h1>
+                    <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                      {[
+                        ["岗位方向", plan.role.label],
+                        ["AI 基础", plan.aiLevel.label],
+                        ["成长目标", plan.growthGoal.label],
+                        ["导师风格", plan.mentorStyle.label]
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm text-slate-500">{label}</p>
+                          <p className="mt-1 font-semibold text-slate-950">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                {selectedFeedback}
+              </div>
+              <Button type="button" size="lg" className="mt-7 w-full bg-[#176BFF]" onClick={next}>
+                {isConfirmStep ? "生成 30-60-90 成长副本" : "继续"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </SectionWrap>
     </PageShell>
@@ -492,9 +434,9 @@ function TestDataControls({
   return (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardContent className="p-5">
-        <p className="text-base font-semibold text-slate-950">测试数据</p>
+        <p className="text-base font-semibold text-slate-950">测试输入</p>
         <p className="mt-1 text-sm leading-6 text-slate-500">
-          这里可以自己切换数据，右侧路径会实时变化。
+          切换任意条件，右侧路径会实时变化。
         </p>
         <div className="mt-4 grid gap-3">
           <NativeSelect
@@ -594,12 +536,19 @@ function StageCard({
           0{index + 1}
         </span>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{stage.goal}</p>
       <div className="mt-5 space-y-4">
+        <InfoBlock title="目标" text={stage.goal} />
         <PlainList title="关键任务" items={stage.tasks} limit={3} />
         <InfoBlock title="交付物" text={stage.deliverable} />
         <PlainList title="导师检查点" items={stage.mentorChecks} limit={2} />
-        <PlainList title="AI 工具建议" items={stage.tools} limit={2} />
+        <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-slate-600">
+            AI 工具建议
+          </summary>
+          <div className="mt-3">
+            <PlainList title="建议" items={stage.tools} limit={2} />
+          </div>
+        </details>
       </div>
     </article>
   );
@@ -607,7 +556,23 @@ function StageCard({
 
 export function PlanPage() {
   const [profile, setProfile] = useProfileState();
+  const [status, setStatus] = useState("已生成路径");
   const plan = useMemo(() => buildGrowthPlan(profile), [profile]);
+  const [visiblePlan, setVisiblePlan] = useState(plan);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setVisiblePlan(plan);
+      setStatus("已更新路径");
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [plan]);
+
+  function updateProfile(nextProfile: GrowthProfile) {
+    setStatus("正在重新生成...");
+    setProfile(nextProfile);
+  }
 
   return (
     <PageShell>
@@ -624,11 +589,33 @@ export function PlanPage() {
           </p>
         </div>
         <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
-          <TestDataControls profile={profile} setProfile={setProfile} />
-          <div className="grid gap-5 xl:grid-cols-3">
-            {plan.stages.map((stage, index) => (
-              <StageCard key={stage.id} stage={stage} index={index} />
-            ))}
+          <TestDataControls profile={profile} setProfile={updateProfile} />
+          <div>
+            <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+              <div>
+                <h2 className="text-xl font-semibold tracking-normal text-slate-950">
+                  已生成 30-60-90 成长副本
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {visiblePlan.role.label} · {visiblePlan.aiLevel.label} · {visiblePlan.mentorStyle.label}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 text-sm",
+                  status === "正在重新生成..."
+                    ? "bg-slate-100 text-slate-500"
+                    : "bg-[#ECFDF5] text-[#15803D]"
+                )}
+              >
+                {status}
+              </span>
+            </div>
+            <div className={cn("grid gap-5 xl:grid-cols-3", status === "正在重新生成..." && "opacity-55")}>
+              {visiblePlan.stages.map((stage, index) => (
+                <StageCard key={stage.id} stage={stage} index={index} />
+              ))}
+            </div>
           </div>
         </div>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
@@ -679,11 +666,8 @@ export function ChecklistPage() {
     <PageShell>
       <SectionWrap>
         <div className="mx-auto max-w-4xl">
-          <Badge className="border-[#D7E5FF] bg-[#F4F8FF] text-[#176BFF]">
+          <h1 className="text-3xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
             导师验收卡
-          </Badge>
-          <h1 className="mt-4 text-3xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
-            导师如何判断新人真的成长了？
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
             每个阶段不只看“做没做”，更看是否能理解、协作和产出。
@@ -695,8 +679,7 @@ export function ChecklistPage() {
               key={card.title}
               className="rounded-[1.25rem] border border-slate-200 bg-white p-6 shadow-sm"
             >
-              <span className="text-sm font-medium text-[#176BFF]">0{index + 1}</span>
-              <h2 className="mt-3 text-xl font-semibold">{card.title}</h2>
+              <h2 className="text-xl font-semibold">{card.title}</h2>
               <PlainList title="验收问题" items={card.items} />
             </article>
           ))}
@@ -779,30 +762,46 @@ function ReportPreview({ profile }: { profile: GrowthProfile }) {
   );
 }
 
-const loadingSteps = [
-  "分析岗位",
-  "生成 30 天任务",
-  "生成 60 天协作计划",
-  "生成 90 天产出目标",
-  "生成导师验收卡"
-];
+function buildReportText(profile: GrowthProfile) {
+  const plan = buildGrowthPlan(profile);
+  const metrics = buildEvaluationMetrics(profile);
+
+  return [
+    "《AI Native 新人 30-60-90 成长副本报告》",
+    "",
+    `岗位方向：${plan.role.label}`,
+    `AI 基础：${plan.aiLevel.label}`,
+    `成长目标：${plan.growthGoal.label}`,
+    `导师风格：${plan.mentorStyle.label}`,
+    "",
+    ...plan.stages.flatMap((stage) => [
+      stage.title,
+      `目标：${stage.goal}`,
+      `关键任务：${stage.tasks.join(" / ")}`,
+      `交付物：${stage.deliverable}`,
+      `导师检查点：${stage.mentorChecks.join(" / ")}`,
+      ""
+    ]),
+    "HR 评估指标",
+    ...metrics.map((item) => `- ${item}`),
+    "",
+    "AI 边界说明",
+    "AI 只辅助生成学习路径、整理任务和建议检查点，不替代导师与 HR 对新人真实表现的判断。"
+  ].join("\n");
+}
 
 export function ReportPage() {
-  const [profile, setProfile] = useProfileState();
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [doneCount, setDoneCount] = useState(loadingSteps.length);
-  const [message, setMessage] = useState("报告已准备好，可以下载或打印保存为 PDF。");
+  const [profile] = useProfileState();
+  const [message, setMessage] = useState("报告预览已生成。");
 
-  async function generateReport() {
-    setIsGenerating(true);
-    setDoneCount(0);
-    setMessage("");
-    for (let index = 0; index < loadingSteps.length; index += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 480));
-      setDoneCount(index + 1);
+  async function copyReport() {
+    const text = buildReportText(profile);
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("报告内容已复制。");
+    } catch {
+      setMessage("当前浏览器不允许直接复制，可以手动选中报告内容复制。");
     }
-    setIsGenerating(false);
-    setMessage("报告已重新生成。");
   }
 
   async function downloadTex() {
@@ -826,7 +825,7 @@ export function ReportPage() {
   }
 
   async function downloadPdfFallback() {
-    setMessage("Demo 环境将使用浏览器打印保存 PDF。");
+    setMessage("请在打印窗口选择“保存为 PDF”。");
     await fetch("/api/report/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -840,64 +839,43 @@ export function ReportPage() {
       <SectionWrap>
         <div className="mb-7 flex flex-col justify-between gap-5 lg:flex-row lg:items-end print:hidden">
           <div>
-            <Badge className="border-[#D7E5FF] bg-[#F4F8FF] text-[#176BFF]">
-              最终成果
-            </Badge>
-            <h1 className="mt-4 text-3xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
-              成长副本报告
+            <h1 className="text-3xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
+              成长副本报告预览
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-              可以切换测试数据后重新生成，也可以下载 LaTeX 或打印保存 PDF。
+              最终页以报告预览为主，方便检查、复制和打印保存。
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button onClick={generateReport} size="lg" className="bg-[#176BFF]" disabled={isGenerating}>
-              {isGenerating ? "生成中..." : "重新生成"}
-              <RefreshCw className={cn("ml-2 h-4 w-4", isGenerating && "animate-spin")} />
-            </Button>
-            <Button onClick={downloadTex} size="lg" variant="outline">
-              下载 LaTeX
-              <Download className="ml-2 h-4 w-4" />
+            <Button onClick={copyReport} size="lg" className="bg-[#176BFF]">
+              复制报告内容
             </Button>
             <Button onClick={downloadPdfFallback} size="lg" variant="outline">
-              下载 PDF
-              <Download className="ml-2 h-4 w-4" />
+              打印 / 保存 PDF
             </Button>
           </div>
         </div>
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <ReportPreview profile={profile} />
           <aside className="space-y-4 print:hidden">
-            <TestDataControls profile={profile} setProfile={setProfile} />
             <Card className="border-slate-200 bg-white shadow-sm">
               <CardContent className="p-5">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-[#176BFF]" />
-                  <h2 className="font-semibold">生成步骤</h2>
-                </div>
-                <div className="mt-5 space-y-3">
-                  {loadingSteps.map((step, index) => {
-                    const done = index < doneCount;
-                    return (
-                      <div key={step} className="flex items-center gap-3 text-sm">
-                        <span
-                          className={cn(
-                            "h-2.5 w-2.5 rounded-full",
-                            done ? "bg-[#176BFF]" : "bg-slate-200"
-                          )}
-                        />
-                        <span className={done ? "text-slate-700" : "text-slate-400"}>
-                          {step}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <h2 className="font-semibold">导出</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  默认建议复制报告内容或使用浏览器打印保存。LaTeX 作为高级导出保留。
+                </p>
                 {message ? (
                   <p className="mt-5 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
                     {message}
                   </p>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={downloadTex}
+                  className="mt-4 text-sm text-slate-500 underline underline-offset-4 transition-colors hover:text-[#176BFF]"
+                >
+                  高级导出：下载 LaTeX 源码
+                </button>
               </CardContent>
             </Card>
             <Card className="border-slate-200 bg-white shadow-sm">
@@ -916,4 +894,3 @@ export function ReportPage() {
     </PageShell>
   );
 }
-
