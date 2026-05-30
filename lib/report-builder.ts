@@ -29,7 +29,6 @@ function itemize(items: string[]) {
 export function buildLatexReport(profile: Partial<GrowthProfile>) {
   const plan = buildGrowthPlan(profile);
   const metrics = buildEvaluationMetrics(plan.profile);
-
   const stageSections = plan.stages
     .map(
       (stage) => `
