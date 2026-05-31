@@ -1,6 +1,6 @@
 # 鹅苗成长副本
 
-在线体验：待部署后补充 Render / Vercel 链接
+在线体验：部署后填入 Render 链接
 
 对应作业：腾讯 AI-HR 培训生线上实战营作业三「成长副本」30-60-90 学习路径设计器。
 
@@ -51,9 +51,10 @@ Render 部署建议：
 ```text
 Build Command: npm install && npm run build
 Start Command: npm run start
+Node: 22.13.0
 ```
 
-Node 版本建议使用 `22.x`。项目不依赖数据库，报告页以预览和复制为主，打印保存 PDF 与 LaTeX 高级导出作为补充能力。
+项目不依赖数据库，报告页以预览和复制为主，打印保存 PDF 与 LaTeX 高级导出作为补充能力。
 
 ## 1 分钟演示路径
 

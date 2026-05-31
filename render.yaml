@@ -6,6 +6,7 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start
     autoDeployTrigger: commit
+    healthCheckPath: /
     envVars:
       - key: NODE_VERSION
         value: 22.13.0

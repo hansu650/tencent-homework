@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, ChevronLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,6 +156,47 @@ function QuickSamples({ onApply }: { onApply: (profile: GrowthProfile) => void }
   );
 }
 
+function HomePathPreview() {
+  const steps = [
+    ["30 天", "入门", "懂业务"],
+    ["60 天", "协作", "会协作"],
+    ["90 天", "产出", "有产出"]
+  ];
+
+  return (
+    <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="grid gap-3 sm:grid-cols-[1fr_48px_1fr_48px_1fr] sm:items-center">
+        {steps.map(([day, title, helper], index) => (
+          <Fragment key={day}>
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12 + index * 0.12, duration: 0.32 }}
+              className="min-w-0"
+            >
+              <p className="text-sm font-semibold text-slate-950">
+                <span className="text-[#176BFF]">{day}</span> {title}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{helper}</p>
+              {index < 2 ? <div className="mt-3 h-px bg-slate-200 sm:hidden" /> : null}
+            </motion.div>
+            {index < 2 ? (
+              <div className="hidden h-px overflow-hidden rounded-full bg-slate-200 sm:block">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                  transition={{ delay: 0.28 + index * 0.14, duration: 0.42 }}
+                  className="h-full bg-[#176BFF]"
+                />
+              </div>
+            ) : null}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function HomePage() {
   const router = useRouter();
 
@@ -183,35 +224,7 @@ export function HomePage() {
               </Link>
             </Button>
           </div>
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
-              {[
-                ["30 天", "入门", "懂业务"],
-                ["60 天", "协作", "会协作"],
-                ["90 天", "产出", "有产出"]
-              ].map(([day, title, helper], index) => (
-                <div key={day} className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-950">
-                    <span className="text-[#176BFF]">{day}</span> {title}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">{helper}</p>
-                  {index < 2 ? (
-                    <div className="mt-3 h-px bg-slate-200 sm:hidden" />
-                  ) : null}
-                </div>
-              )).flatMap((item, index) =>
-                index < 2
-                  ? [
-                      item,
-                      <div
-                        key={`arrow-${index}`}
-                        className="hidden h-px w-10 bg-slate-300 sm:block"
-                      />
-                    ]
-                  : [item]
-              )}
-            </div>
-          </div>
+          <HomePathPreview />
           <div className="mt-8 border-t border-slate-200 pt-6">
             <QuickSamples onApply={(profile) => applySample(profile, router)} />
           </div>
@@ -239,7 +252,7 @@ function OptionCard<T extends string>({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full rounded-xl border bg-white p-4 text-left transition-colors hover:border-[#176BFF]",
+        "w-full rounded-xl border bg-white p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[#176BFF] hover:bg-[#F4F8FF] hover:shadow-sm",
         selected ? "border-[#176BFF] bg-[#F4F8FF]" : "border-slate-200"
       )}
     >
@@ -598,8 +611,10 @@ export function PlanPage() {
   const [visiblePlan, setVisiblePlan] = useState(plan);
 
   useEffect(() => {
-    setVisiblePlan(plan);
-  }, [plan]);
+    if (status !== "正在重新生成...") {
+      setVisiblePlan(plan);
+    }
+  }, [plan, status]);
 
   function updateProfile(nextProfile: GrowthProfile) {
     setStatus("正在重新生成...");
@@ -647,11 +662,20 @@ export function PlanPage() {
                 {status}
               </span>
             </div>
-            <div className={cn("grid gap-5 xl:grid-cols-3", status === "正在重新生成..." && "opacity-55")}>
+            <motion.div
+              key={`${visiblePlan.profile.role}-${visiblePlan.profile.aiLevel}-${visiblePlan.profile.growthGoal}-${visiblePlan.profile.mentorStyle}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{
+                opacity: status === "正在重新生成..." ? 0.55 : 1,
+                y: 0
+              }}
+              transition={{ duration: 0.28 }}
+              className="grid gap-5 xl:grid-cols-3"
+            >
               {visiblePlan.stages.map((stage) => (
                 <StageCard key={stage.id} stage={stage} />
               ))}
-            </div>
+            </motion.div>
           </div>
         </div>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
@@ -738,7 +762,7 @@ function ReportPreview({ profile }: { profile: GrowthProfile }) {
   const metrics = buildEvaluationMetrics(profile);
 
   return (
-    <article className="rounded-[1rem] border border-slate-200 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.08)] sm:p-9 print:border-none print:shadow-none">
+    <article className="mx-auto max-w-[840px] rounded-[1rem] border border-slate-200 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.08)] sm:p-9 print:border-none print:shadow-none">
       <div className="border-b border-slate-200 pb-5">
         <p className="text-sm font-semibold text-[#176BFF]">鹅苗成长副本</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
