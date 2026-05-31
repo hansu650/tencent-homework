@@ -183,6 +183,35 @@ export function HomePage() {
               </Link>
             </Button>
           </div>
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+              {[
+                ["30 天", "入门", "懂业务"],
+                ["60 天", "协作", "会协作"],
+                ["90 天", "产出", "有产出"]
+              ].map(([day, title, helper], index) => (
+                <div key={day} className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-950">
+                    <span className="text-[#176BFF]">{day}</span> {title}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{helper}</p>
+                  {index < 2 ? (
+                    <div className="mt-3 h-px bg-slate-200 sm:hidden" />
+                  ) : null}
+                </div>
+              )).flatMap((item, index) =>
+                index < 2
+                  ? [
+                      item,
+                      <div
+                        key={`arrow-${index}`}
+                        className="hidden h-px w-10 bg-slate-300 sm:block"
+                      />
+                    ]
+                  : [item]
+              )}
+            </div>
+          </div>
           <div className="mt-8 border-t border-slate-200 pt-6">
             <QuickSamples onApply={(profile) => applySample(profile, router)} />
           </div>
@@ -434,7 +463,7 @@ function TestDataControls({
   return (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardContent className="p-5">
-        <p className="text-base font-semibold text-slate-950">测试输入</p>
+        <p className="text-base font-semibold text-slate-950">生成器控制台</p>
         <p className="mt-1 text-sm leading-6 text-slate-500">
           切换任意条件，右侧路径会实时变化。
         </p>
@@ -519,29 +548,37 @@ function InfoBlock({ title, text }: { title: string; text: string }) {
 }
 
 function StageCard({
-  stage,
-  index
+  stage
 }: {
   stage: ReturnType<typeof buildGrowthPlan>["stages"][number];
-  index: number;
 }) {
+  const stageLabel = {
+    "30": "入门副本",
+    "60": "协作副本",
+    "90": "产出副本"
+  }[stage.id];
+
   return (
-    <article className="rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-[#176BFF]">{stage.subtitle}</p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-normal">{stage.title}</h3>
-        </div>
-        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">
-          0{index + 1}
-        </span>
+    <article className="relative flex min-h-[580px] flex-col overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="pointer-events-none absolute right-5 top-4 text-7xl font-semibold leading-none text-slate-100">
+        {stage.id}
       </div>
-      <div className="mt-5 space-y-4">
-        <InfoBlock title="目标" text={stage.goal} />
-        <PlainList title="关键任务" items={stage.tasks} limit={3} />
+      <div className="relative">
+        <p className="text-sm font-medium text-[#176BFF]">{stage.id} 天</p>
+        <h3 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
+          {stageLabel}
+        </h3>
+      </div>
+      <div className="relative mt-6 flex flex-1 flex-col gap-4">
+        <InfoBlock title="阶段目标" text={stage.goal} />
+        <div>
+          <PlainList title="关键任务" items={stage.tasks} limit={3} />
+        </div>
         <InfoBlock title="交付物" text={stage.deliverable} />
-        <PlainList title="导师检查点" items={stage.mentorChecks} limit={2} />
-        <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div>
+          <PlainList title="导师检查点" items={stage.mentorChecks} limit={2} />
+        </div>
+        <details className="mt-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
           <summary className="cursor-pointer text-sm font-medium text-slate-600">
             AI 工具建议
           </summary>
@@ -556,22 +593,21 @@ function StageCard({
 
 export function PlanPage() {
   const [profile, setProfile] = useProfileState();
-  const [status, setStatus] = useState("已生成路径");
+  const [status, setStatus] = useState("已更新路径");
   const plan = useMemo(() => buildGrowthPlan(profile), [profile]);
   const [visiblePlan, setVisiblePlan] = useState(plan);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setVisiblePlan(plan);
-      setStatus("已更新路径");
-    }, 500);
-
-    return () => window.clearTimeout(timer);
+    setVisiblePlan(plan);
   }, [plan]);
 
   function updateProfile(nextProfile: GrowthProfile) {
     setStatus("正在重新生成...");
     setProfile(nextProfile);
+    window.setTimeout(() => {
+      setVisiblePlan(buildGrowthPlan(nextProfile));
+      setStatus("已更新路径");
+    }, 500);
   }
 
   return (
@@ -594,10 +630,10 @@ export function PlanPage() {
             <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
               <div>
                 <h2 className="text-xl font-semibold tracking-normal text-slate-950">
-                  已生成 30-60-90 成长副本
+                  已生成成长副本
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {visiblePlan.role.label} · {visiblePlan.aiLevel.label} · {visiblePlan.mentorStyle.label}
+                  {visiblePlan.role.label} · {visiblePlan.aiLevel.label} · {visiblePlan.mentorStyle.label}导师
                 </p>
               </div>
               <span
@@ -612,8 +648,8 @@ export function PlanPage() {
               </span>
             </div>
             <div className={cn("grid gap-5 xl:grid-cols-3", status === "正在重新生成..." && "opacity-55")}>
-              {visiblePlan.stages.map((stage, index) => (
-                <StageCard key={stage.id} stage={stage} index={index} />
+              {visiblePlan.stages.map((stage) => (
+                <StageCard key={stage.id} stage={stage} />
               ))}
             </div>
           </div>
@@ -702,7 +738,7 @@ function ReportPreview({ profile }: { profile: GrowthProfile }) {
   const metrics = buildEvaluationMetrics(profile);
 
   return (
-    <article className="rounded-[1.25rem] border border-slate-200 bg-white p-6 shadow-sm print:border-none print:shadow-none">
+    <article className="rounded-[1rem] border border-slate-200 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.08)] sm:p-9 print:border-none print:shadow-none">
       <div className="border-b border-slate-200 pb-5">
         <p className="text-sm font-semibold text-[#176BFF]">鹅苗成长副本</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
@@ -727,8 +763,15 @@ function ReportPreview({ profile }: { profile: GrowthProfile }) {
       </div>
       <div className="mt-6 space-y-5">
         {plan.stages.map((stage) => (
-          <section key={stage.id} className="rounded-xl border border-slate-200 p-4">
-            <h2 className="text-lg font-semibold">{stage.title}</h2>
+          <section key={stage.id} className="rounded-xl border border-slate-200 p-5">
+            <p className="text-sm font-semibold text-[#176BFF]">{stage.id} 天</p>
+            <h2 className="mt-1 text-lg font-semibold">
+              {{
+                "30": "入门副本",
+                "60": "协作副本",
+                "90": "产出副本"
+              }[stage.id]}
+            </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">{stage.goal}</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <PlainList title="关键任务" items={stage.tasks} />
@@ -739,7 +782,7 @@ function ReportPreview({ profile }: { profile: GrowthProfile }) {
           </section>
         ))}
       </div>
-      <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <section className="mt-5 rounded-xl border border-[#D7E5FF] bg-[#F4F8FF] p-4">
         <h2 className="text-lg font-semibold text-slate-950">AI 边界说明</h2>
         <p className="mt-2 text-sm leading-7 text-slate-700">
           AI 只辅助生成学习路径、整理任务和建议检查点，不替代导师与 HR 对新人真实表现的判断。
