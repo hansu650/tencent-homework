@@ -1,0 +1,53 @@
+\documentclass[UTF8,a4paper,11pt]{ctexart}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{MainBlue}{HTML}{176BFF}
+\definecolor{SoftBlue}{HTML}{F4F8FF}
+\definecolor{TextGray}{HTML}{4B5563}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=MainBlue,
+  urlcolor=MainBlue
+}
+
+\setlength{\parindent}{0em}
+\setlength{\parskip}{0.65em}
+\setlist[itemize]{leftmargin=1.2em,itemsep=0.2em,topsep=0.2em}
+
+\title{\textbf{鹅苗成长副本｜方案说明}\\
+\large AI Native 新人 30-60-90 路径生成器}
+\author{腾讯 AI-HR 实战营作业三}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\colorbox{SoftBlue}{\parbox{0.92\linewidth}{\small
+《鹅苗成长副本》对应腾讯 AI-HR 实战营作业三「成长副本」30-60-90 学习路径设计器。作品聚焦 AI Native 组织中的新人成长：新人不只是熟悉制度和业务，更需要逐步掌握 AI 工具链、理解人机协同，并完成真实产出。
+}}
+\end{center}
+
+\section{问题诊断}
+传统新人培养常停留在制度宣讲、资料阅读和导师口头提醒，容易出现路径不清、检查标准不清、成长结果难复盘的问题。AI Native 组织中新人还需要建立 AI 思维和人机协作习惯，因此单纯培训清单已经不够。
+
+\section{方案设计}
+Demo 以 HR 视角设计为一个轻量生成器。用户输入新人岗位、AI 使用基础、成长目标和导师风格后，系统生成 30 天入门副本、60 天协作副本和 90 天产出副本。每个阶段包含阶段目标、关键任务、交付物和导师检查点，让新人知道下一步做什么，也让导师知道如何判断成长是否发生。
+
+\section{AI 工具选型理由}
+Demo 使用 Next.js、TypeScript 和 Tailwind 搭建交互原型，用规则化生成逻辑模拟 AI 路径生成过程，并支持报告预览、复制和打印保存。实际落地时可接入大模型，根据岗位 JD、团队任务、导师反馈和新人基础动态生成更个性化的成长路径。
+
+\section{关键配置}
+生成器核心输入包括岗位方向、AI 基础、成长目标和导师风格；核心输出包括 30/60/90 三阶段任务、导师验收卡和最终成长报告。不同岗位会生成不同任务，例如产品新人偏业务理解和需求分析，研发新人偏代码理解和小功能交付，HR 新人偏流程理解和 AI 辅助工具实践。
+
+\section{迭代记录}
+本作品从“大而全”的管理视角收敛为“一步一问”的生成器体验，重点突出作业三的 30-60-90 路径设计。界面中弱化复杂功能，强化可测试输入、实时生成结果和最终报告预览，使评委能快速理解产品主线。
+
+\section{效果评估}
+可从三方面评估效果：新人是否更清楚每阶段任务，导师是否更容易完成阶段验收，HR 是否能将成长路径沉淀为可复盘材料。作品也融入课程中的创意型、分析型、沟通型和技术应用型 HR 思维，并结合腾讯“用户为本，科技向善”和正直、进取、协作、创造的价值观，强调 AI 只辅助生成路径、整理任务和建议检查点，不替代导师与 HR 对新人真实表现的判断。
+
+\end{document}
